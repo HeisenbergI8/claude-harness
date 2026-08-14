@@ -252,6 +252,15 @@ tree is red.
   is green, a log exists. All three are proxies that can be true while the work is wrong. There is no
   screenshot check and no person in the loop.
 
+## Docs
+
+| | |
+| --- | --- |
+| [`docs/configuration.md`](docs/configuration.md) | Every config key, what it does, and what happens if you get it wrong |
+| [`docs/hooks.md`](docs/hooks.md) | What is registered, which payload fields are used, how to probe your own build, how to add a gate |
+| [`docs/design.md`](docs/design.md) | Why each mechanism is shaped the way it is, and what the obvious alternative gets wrong |
+| [`docs/pipeline.md`](docs/pipeline.md) | Tier routing, the plan artifact directory, the task loop, and where enforcement actually lives |
+
 ## Development
 
 ```bash
