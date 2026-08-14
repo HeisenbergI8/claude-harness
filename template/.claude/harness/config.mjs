@@ -338,10 +338,24 @@ export const buildEvidencePatterns = (config, errors = []) => {
     }
   }
 
-  // verifyFast before verify: a literal `verify` command is a prefix of a literal `verify:fast` one in
-  // most script runners, and the lookahead in commandToRegExp handles the rest.
-  if (config.commands.verifyFast) push('verify:fast', commandToRegExp(config.commands.verifyFast), 'commands.verifyFast')
-  if (config.commands.verify) push('verify', commandToRegExp(config.commands.verify), 'commands.verify')
+  // ── LONGEST COMMAND FIRST ────────────────────────────────────────────────────
+  //
+  // First match wins, so when one declared command CONTAINS another the longer one must be tested
+  // first. This bites in both directions and neither is exotic:
+  //
+  //   npm run verify        is a prefix of  npm run verify:fast
+  //   ruff check . && mypy .  is a prefix of  ruff check . && mypy . && pytest -q
+  //
+  // Get the order wrong and every run of the full gate is recorded as the fast one, which silently
+  // removes the distinction between "still working" and "wrapping up" — the exact signal the review
+  // gate keys on. Sorting by length is what makes this correct without special-casing either shape.
+  const declared = Object.entries(config.commands ?? {})
+    .filter(([, command]) => Boolean(command))
+    .sort(([, a], [, b]) => String(b).length - String(a).length)
+
+  for (const [name, command] of declared) {
+    push(name === 'verifyFast' ? 'verify:fast' : name, commandToRegExp(command), `commands.${name}`)
+  }
 
   for (const entry of config.evidence?.patterns ?? []) {
     if (!entry?.kind || !entry?.match) {

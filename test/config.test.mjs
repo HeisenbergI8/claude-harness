@@ -57,6 +57,26 @@ test('a non-npm verify command is recognised as the closing gate', () => {
   assert.equal(classifyCommand(config, 'make typecheck'), 'verify:fast')
 })
 
+// THE BUG THIS PINS, found by installing into a real Python project: the fast command is a PREFIX of
+// the full one, so with the wrong ordering every run of the full gate was recorded as the fast one —
+// silently deleting the distinction between "still working" and "wrapping up".
+test('a fast command that is a PREFIX of the full one does not swallow it', () => {
+  const config = withCommands({
+    verify: 'ruff check . && mypy . && pytest -q',
+    verifyFast: 'ruff check . && mypy .'
+  })
+
+  assert.equal(classifyCommand(config, 'ruff check . && mypy . && pytest -q'), 'verify')
+  assert.equal(classifyCommand(config, 'ruff check . && mypy .'), 'verify:fast')
+})
+
+test('the same holds in the other direction, where the FULL command is the shorter string', () => {
+  const config = withCommands({ verify: 'npm run verify', verifyFast: 'npm run verify:fast' })
+
+  assert.equal(classifyCommand(config, 'npm run verify:fast'), 'verify:fast')
+  assert.equal(classifyCommand(config, 'npm run verify'), 'verify')
+})
+
 test('builtin catalog covers the common ecosystems', () => {
   const config = withCommands({})
 

@@ -164,7 +164,11 @@ export const silentHooks = (registered, seen, instrumented) =>
 
 // Hooks in this harness that call beat(). Anything registered but not listed here is simply not
 // instrumented, and saying so is what stops the report overclaiming.
-export const INSTRUMENTED = ['claim-check', 'verify-gate', 'loop-breaker', 'record-activity']
+//
+// The GUARDS are deliberately absent. They fire only when their tool is used, so "never fired" is the
+// normal state for a session that wrote no files or ran no shell commands — reporting that as death
+// would be a false alarm on every quiet session, and a false alarm is how an alarm gets ignored.
+export const INSTRUMENTED = ['claim-check', 'verify-gate', 'loop-breaker', 'record-activity', 'review-gate', 'task-driver']
 
 // ── CLI ────────────────────────────────────────────────────────────────────────
 

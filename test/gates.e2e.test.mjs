@@ -240,11 +240,14 @@ test('selftest passes once every gate has actually fired', () => {
   const repo = fresh()
   const live = { CLAUDE_HOOK_TEST: '0' }
 
+  // Every hook in INSTRUMENTED must beat, or the selftest correctly reports the missing one as dead.
   runHook(repo, 'record-activity.mjs', editPayload({ file: 'src/a.ts' }), { env: live })
   runHook(repo, 'record-activity.mjs', bashPayload({ command: 'npm run verify', ok: true }), { env: live })
   runHook(repo, 'loop-breaker.mjs', bashPayload({ command: 'npm run x', ok: true, id: 'u1' }), { env: live })
   runHook(repo, 'verify-gate.mjs', stopPayload({}), { env: live })
   runHook(repo, 'claim-check.mjs', stopPayload({}), { env: live })
+  runHook(repo, 'review-gate.mjs', stopPayload({}), { env: live })
+  runHook(repo, 'task-driver.mjs', stopPayload({}), { env: live })
 
   const { status, stdout } = spawnSelftest(repo)
 

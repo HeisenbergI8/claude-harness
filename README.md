@@ -28,16 +28,42 @@ So this harness records what happened and compares the claim against the record.
 
 ## What it actually does
 
+**Evidence and gates** — the spine. Everything else stands on this.
+
 | Mechanism | Event | What it enforces |
 | --- | --- | --- |
-| `record-activity` | every tool call | Writes an append-only ledger: which source files were edited, which verification commands ran, and each one's exit code |
+| `record-activity` | every tool call | Append-only ledger: which source files were edited, which verification commands ran, each one's exit code |
 | `claim-check` | `Stop` | Blocks a turn that edited source and verified nothing — or that asserts a green gate the ledger cannot support |
 | `verify-gate` | `Stop`, `SubagentStop` | Runs your fast check. Red tree → **block** → **escalate** → **HALT** with a written report |
-| `loop-breaker` | `PostToolUse` | Counts consecutive failures of the same command. Warns at 2, blocks at 3, halts on a second block |
-| `hook-heartbeat` | called by the others | Records that hooks fired and what their payloads carried, so "configured" and "firing" can be told apart |
-| `selftest` | you run it | Answers whether the harness is working or merely installed |
+| `loop-breaker` | `PostToolUse` | Consecutive failures of one command. Warns at 2, blocks at 3, halts on a second block |
+| `review-gate` | `Stop` | Blocks **once** when source changed and the full gate went green but no review agent ran |
+| `hook-heartbeat` | called by the others | Records that hooks fired and what their payloads carried |
+| `selftest` | you run it | Answers whether the harness is working or merely *installed* |
 
-Everything is plain Node with zero dependencies, reading one config file.
+**Guards** — `PreToolUse`, and every one is scoped to avoid refusing ordinary work.
+
+| Guard | Refuses |
+| --- | --- |
+| `guard-destructive` | Deletion, overwrite or move reaching outside the repo; `git clean -f`, `reset --hard`, `checkout -- .` |
+| `guard-secrets` | Credentials into the transcript (`cat .env`) or into the repo |
+| `guard-commit` | A commit carrying a credential file, build output, a second lockfile, or a red tree |
+| `guard-write` | Writes outside the repo, for anyone; writes outside their role, for named agents |
+
+**Agents and skills** — role separation that a guard makes real rather than promised.
+
+`architect` (plans, cannot build) · `tester` (verifies, cannot edit source) · `auditor` /
+`change-auditor` (read-only, no write tools at all) · `merge-conflict-resolver`, plus skills for
+implementing a plan, escaping a failure loop, writing lean code, and curating what the project has
+learned.
+
+**Plan pipeline and task loop** — `verify-plan` runs each plan step's check and grades the checks
+themselves; `next-phase` tracks the cursor; `task-driver` blocks `Stop` with the next phase, so code
+decides *whether* to continue and the model does the work.
+
+**Memory** — a capped lesson store injected on matching prompts, over an episodic candidate log that is
+captured automatically and never injected.
+
+Everything is plain Node with **zero dependencies**, reading one config file.
 
 ## Install
 
@@ -53,17 +79,30 @@ node claude-harness/bin/harness-init.mjs /path/to/your/repo
 ```
 
 It detects your project type (Node, Python, Go, Rust, Make), writes a starter `harness.config.json`,
-copies the scripts to `.claude/harness/`, and **merges** hooks into `.claude/settings.json` without
-touching anything already there. Running it twice changes nothing.
+copies the scripts to `.claude/harness/`, installs the agents and skills, scaffolds `CONVENTIONS.md`,
+and **merges** hooks into `.claude/settings.json` without touching anything already there.
 
-Then — and this is the step people skip:
+Running it twice changes nothing. **Agents, skills and `CONVENTIONS.md` are never overwritten** — not
+even with `--force`. Prompts get tuned in place, and silently replacing a tuned agent with the stock one
+is invisible damage.
+
+Then two steps people skip, in order of how much they matter:
+
+**1. Fill in `CONVENTIONS.md`, and delete every section you do not fill.**
+
+The agents are deliberately generic — they know how to plan, verify and audit, and nothing about your
+project. This file is where that knowledge lives, and it is the difference between a plan grounded in
+code that exists and one made of plausible-sounding advice. A scaffold left as-is is *worse* than no
+file, because they will follow it. The selftest warns until you delete the marker at the top.
+
+**2. Restart, run a turn, then check the harness is actually alive.**
 
 ```bash
-# 1. restart your Claude Code session; hooks are read at startup
-# 2. run one turn
-# 3. confirm the hooks actually fired
 node .claude/harness/selftest.mjs
 ```
+
+Hooks are read at session startup, so nothing fires until you restart — and that window is exactly when
+"configured" and "firing" differ.
 
 ## Configure
 
@@ -171,22 +210,52 @@ is answered by evidence instead of by hope.
   a row, and every honest sentence — "I have not run the tests yet", "the suite failed, here is the
   output" — must pass untouched. Those are pinned verbatim in `test/claim-check.test.mjs`.
 
-## What is deliberately not here
+## Two more ideas, from the layers above the gates
 
-This is the evidence layer. It ships **no agents, no skills, no planning pipeline, and no task loop** —
-those are valuable, but they are opinions about how you should work, and they are much harder to make
-project-agnostic. The ledger and the gates are the part that is true regardless of your workflow.
+### 5. "May be executed" and "is a valid gate" are different claims
 
-Two honest limits, stated plainly:
+`verify-plan` runs each plan step's `**Verify:**` command — and **grades the command itself**.
+
+A `grep -q "<token>" <file>` where the step is what puts `<token>` in `<file>` passes the instant the
+text is typed. It proves authorship, not behaviour. Measured on one real plan: 16 checks, of which 11
+were that shape. A step reported PASS while a third of it was never delivered, because its grep matched
+a string the other two-thirds had introduced.
+
+So every check is classified — `real`, `self`, `exists`, `none` — and `--strict` exits **2** when under
+half can fail. Exit 2 is deliberately distinct from exit 1: *there is work to do* and *this plan cannot
+tell you whether work was done* are different facts.
+
+The same distinction applies to unsatisfiable checks. If your project has a suite with known-failing
+tests, gating a step on it means the step fails forever against correct code — the phase never
+completes, and the loop halts naming work that was finished.
+
+### 6. Halt checks run before you look at the tree
+
+The obvious task loop is one ordered list with `tree red → release` at the top. That **silently abandons
+runs**: one that is red *and* stuck releases every turn forever, the repair loop steps aside, and no
+halt report is ever written. You come back to a run that looks like it just stopped.
+
+It also makes termination vacuous — releases do not spend budget, so a perpetually-red run never
+exhausts one.
+
+Halts are therefore evaluated unconditionally, and only if none fire does the driver ask whether the
+tree is red.
+
+## Honest limits
 
 - **`disableAllHooks` turns all of this off.** It is a guardrail, not a sandbox.
-- **A hook cannot spawn an agent.** It can only refuse a turn and say what to do. Anything described
-  here as "enforced" means "refused and explained", never "performed automatically".
+- **A hook cannot spawn an agent.** It can only refuse a turn and say what to launch. Anything described
+  here as "enforced" means *refused and explained*, never *performed automatically*.
+- **The auditors have no write tools, but they do have Bash.** They are guarded on the write path, not
+  sandboxed.
+- **`goal-check` reporting `done` means the machine is satisfied** — every step's check passed, the tree
+  is green, a log exists. All three are proxies that can be true while the work is wrong. There is no
+  screenshot check and no person in the loop.
 
 ## Development
 
 ```bash
-npm test                    # 142 assertions, both directions
+npm test                    # 324 assertions, both directions
 node bin/harness-init.mjs --dry-run /path/to/repo
 ```
 

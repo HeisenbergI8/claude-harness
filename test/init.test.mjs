@@ -122,6 +122,76 @@ test('a fresh install lands the scripts, a config and the hooks', () => {
   assert.ok(JSON.parse(repo.read('.claude/settings.json')).hooks.Stop)
 })
 
+test('a fresh install lands the agents, skills and the conventions scaffold', () => {
+  const repo = fresh({ config: null })
+
+  for (const file of [
+    '.claude/agents/architect.md',
+    '.claude/agents/tester.md',
+    '.claude/agents/auditor.md',
+    '.claude/agents/change-auditor.md',
+    '.claude/skills/implement-plan/SKILL.md',
+    '.claude/skills/debug-ladder/SKILL.md',
+    '.claude/skills/lesson-keeper/SKILL.md',
+    'CONVENTIONS.md'
+  ]) {
+    assert.ok(existsSync(repo.path(file)), `missing ${file}`)
+  }
+})
+
+// Prompts get tuned in place. Overwriting a file somebody adjusted three weeks ago is INVISIBLE damage:
+// nothing errors, and behaviour drifts back to stock without anyone noticing.
+test('agents, skills and CONVENTIONS.md are NEVER overwritten, even with --force', () => {
+  const repo = fresh({ config: null })
+
+  writeFileSync(repo.path('.claude/agents/architect.md'), 'MY TUNED ARCHITECT')
+  writeFileSync(repo.path('.claude/skills/debug-ladder/SKILL.md'), 'MY TUNED SKILL')
+  writeFileSync(repo.path('CONVENTIONS.md'), 'MY REAL CONVENTIONS')
+
+  install(repo.root, '--force')
+  install(repo.root, '--upgrade')
+
+  assert.equal(repo.read('.claude/agents/architect.md'), 'MY TUNED ARCHITECT')
+  assert.equal(repo.read('.claude/skills/debug-ladder/SKILL.md'), 'MY TUNED SKILL')
+  assert.equal(repo.read('CONVENTIONS.md'), 'MY REAL CONVENTIONS')
+})
+
+test('every shipped agent and skill has the frontmatter that makes it loadable', () => {
+  for (const [dir, file] of [
+    ['agents', 'architect.md'],
+    ['agents', 'tester.md'],
+    ['agents', 'auditor.md'],
+    ['agents', 'change-auditor.md'],
+    ['agents', 'merge-conflict-resolver.md'],
+    ['skills/implement-plan', 'SKILL.md'],
+    ['skills/lean-code', 'SKILL.md'],
+    ['skills/debug-ladder', 'SKILL.md'],
+    ['skills/lesson-keeper', 'SKILL.md'],
+    ['skills/lessons-review', 'SKILL.md'],
+    ['skills/build', 'SKILL.md'],
+    ['skills/git-committer', 'SKILL.md'],
+    ['skills/ticket-writer', 'SKILL.md']
+  ]) {
+    const text = readFileSync(join(REPO, 'template/.claude', dir, file), 'utf8')
+
+    assert.match(text, /^---\n/, `${dir}/${file} has no frontmatter block`)
+    assert.match(text, /\nname: [\w-]+\n/, `${dir}/${file} has no name`)
+    assert.match(text, /\ndescription: /, `${dir}/${file} has no description`)
+  }
+})
+
+// The read-only agents must have no write tools at all — that is what makes "an auditor cannot edit
+// what it audits" structural rather than a promise.
+test('both auditors ship without Edit or Write', () => {
+  for (const agent of ['auditor.md', 'change-auditor.md']) {
+    const frontmatter = readFileSync(join(REPO, 'template/.claude/agents', agent), 'utf8').split('---')[1]
+    const tools = frontmatter.match(/\ntools: (.+)/)?.[1] ?? ''
+
+    assert.ok(tools, `${agent} must declare a tools list`)
+    assert.ok(!/\b(Edit|Write|NotebookEdit)\b/.test(tools), `${agent} must not have write tools: ${tools}`)
+  }
+})
+
 test('detection reads the real package.json and picks a runner', () => {
   const repo = fresh({ packageJson: { name: 'x', packageManager: 'pnpm@9', scripts: { check: 'vitest run' } } })
 

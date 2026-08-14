@@ -1,6 +1,87 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(git clean:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(mkfs:*)",
+      "Bash(shutdown:*)",
+      "Read(./.env)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)"
+    ]
+  },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/lessons.mjs", "inject"],
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/candidates.mjs", "record"],
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/build-trigger.mjs"],
+            "statusMessage": "Task loop: reading /build",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/guard-write.mjs"],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/guard-secrets.mjs"],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/guard-destructive.mjs"],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/guard-secrets.mjs"],
+            "statusMessage": "Checking for secrets",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/guard-commit.mjs"],
+            "statusMessage": "Checking the commit",
+            "timeout": 180
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|NotebookEdit|MultiEdit|Bash",
@@ -56,6 +137,12 @@
           {
             "type": "command",
             "command": "node",
+            "args": [".claude/harness/candidates.mjs", "finding"],
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
             "args": [".claude/harness/verify-gate.mjs"],
             "statusMessage": "Verifying subagent work",
             "timeout": 180
@@ -79,6 +166,37 @@
             "args": [".claude/harness/verify-gate.mjs"],
             "statusMessage": "Verifying before finishing",
             "timeout": 180
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/review-gate.mjs"],
+            "statusMessage": "Checking whether the reviewers ran",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/candidates.mjs", "reflect"],
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/task-driver.mjs"],
+            "statusMessage": "Task loop: deciding whether to continue",
+            "timeout": 180
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/harness/lesson-prompt.mjs"],
+            "statusMessage": "Checking for anything worth learning",
+            "timeout": 30
           }
         ]
       }

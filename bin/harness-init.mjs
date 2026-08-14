@@ -218,6 +218,46 @@ export const mergeSettings = (existing, incoming) => {
 //
 // The state directory is runtime scratch and must never be committed. The CONFIG must be — see the note
 // in config.mjs about why a definition of "verified" that can move without a diff is not a gate.
+// Copies a directory tree, SKIPPING anything that already exists.
+//
+// Prompts are tuned in place. Overwriting a file somebody adjusted three weeks ago is invisible damage:
+// nothing errors, and the behaviour drifts back to stock without anyone noticing.
+const copyTreeIfAbsent = (source, destination, root) => {
+  let entries
+
+  try {
+    entries = readdirSync(source, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  if (!dryRun) mkdirSync(destination, { recursive: true })
+
+  for (const entry of entries) {
+    const from = join(source, entry.name)
+    const to = join(destination, entry.name)
+
+    if (entry.isDirectory()) {
+      copyTreeIfAbsent(from, to, root)
+      continue
+    }
+
+    const relative = to.replace(`${root}/`, '')
+
+    if (existsSync(to)) {
+      record('keep', `${relative}  (yours)`)
+      continue
+    }
+
+    record('create', relative)
+
+    if (!dryRun) {
+      mkdirSync(dirname(to), { recursive: true })
+      copyFileSync(from, to)
+    }
+  }
+}
+
 export const ensureGitignore = (text, entry) => {
   const lines = (text ?? '').split('\n')
 
@@ -253,6 +293,18 @@ const main = () => {
     if (!dryRun) copyFileSync(join(sourceDir, file), destination)
   }
 
+  // 2. Agents and skills.
+  //
+  // NEVER OVERWRITTEN, even on --upgrade. These are prompts, and a project that has been running for a
+  // month has almost certainly tuned them — silently replacing a tuned agent with the stock one is the
+  // most damaging thing this installer could do, because the damage is invisible until behaviour drifts.
+  for (const [source, destination] of [
+    [join(TEMPLATE, '.claude/agents'), join(target, '.claude/agents')],
+    [join(TEMPLATE, '.claude/skills'), join(target, '.claude/skills')]
+  ]) {
+    copyTreeIfAbsent(source, destination, target)
+  }
+
   if (upgrade) {
     log(changes.join('\n'))
     log('\nScripts refreshed. Config and settings.json left untouched (--upgrade).')
@@ -276,6 +328,18 @@ const main = () => {
 
     record(configExists ? 'overwrite' : 'create', 'harness.config.json')
     write(configPath, `${JSON.stringify(config, null, 2)}\n`)
+  }
+
+  // 2b. CONVENTIONS.md — scaffolded once, never overwritten.
+  //
+  // This is the single most important file for the agents, and the one the installer cannot fill in.
+  const conventionsPath = join(target, 'CONVENTIONS.md')
+
+  if (existsSync(conventionsPath)) {
+    record('keep', 'CONVENTIONS.md  (yours)')
+  } else {
+    record('create', 'CONVENTIONS.md')
+    write(conventionsPath, readFileSync(join(TEMPLATE, 'CONVENTIONS.md'), 'utf8'))
   }
 
   // 3. settings.json — merged, never replaced.
@@ -308,10 +372,13 @@ const main = () => {
 
   log('\nNext:')
   log('  1. Open harness.config.json and check the two commands are the ones you actually run.')
-  log('  2. Commit harness.config.json. It defines what "verified" means here, so it belongs in the diff.')
-  log('  3. RESTART your Claude Code session — hooks are read at startup and will not fire until you do.')
-  log('  4. Run one turn, then `node .claude/harness/selftest.mjs` to confirm the hooks actually fired.')
-  log('\n     "Configured" and "firing" are different states. Step 4 is the one that tells them apart.')
+  log('  2. FILL IN CONVENTIONS.md — and delete every section you do not fill.')
+  log('     The agents read it as the authority on this project. A scaffold left as-is is worse than')
+  log('     no file at all, because they will follow it.')
+  log('  3. Commit both. They define what "verified" and "correct" mean here, so they belong in a diff.')
+  log('  4. RESTART your Claude Code session — hooks are read at startup and will not fire until you do.')
+  log('  5. Run one turn, then `node .claude/harness/selftest.mjs` to confirm the hooks actually fired.')
+  log('\n     "Configured" and "firing" are different states. Step 5 is the one that tells them apart.')
 }
 
 if (process.argv[1]?.endsWith('harness-init.mjs')) main()

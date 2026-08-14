@@ -12,13 +12,34 @@
 //
 // Exit codes:  0 = healthy (warnings allowed)   1 = something is wrong and gates are degraded
 
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { classifyCommand, load } from './config.mjs'
 import { INSTRUMENTED, foldBeats, readRegisteredHooks, silentHooks } from './hook-heartbeat.mjs'
 
-const SCRIPTS = ['config.mjs', 'record-activity.mjs', 'claim-check.mjs', 'verify-gate.mjs', 'loop-breaker.mjs', 'hook-heartbeat.mjs']
+const SCRIPTS = [
+  'config.mjs',
+  'record-activity.mjs',
+  'claim-check.mjs',
+  'verify-gate.mjs',
+  'loop-breaker.mjs',
+  'hook-heartbeat.mjs',
+  'review-gate.mjs',
+  'guard-write.mjs',
+  'guard-destructive.mjs',
+  'guard-secrets.mjs',
+  'guard-commit.mjs',
+  'verify-plan.mjs',
+  'next-phase.mjs',
+  'goal-check.mjs',
+  'run-state.mjs',
+  'task-driver.mjs',
+  'build-trigger.mjs',
+  'lessons.mjs',
+  'lesson-prompt.mjs',
+  'candidates.mjs'
+]
 
 const problems = []
 const warnings = []
@@ -172,6 +193,61 @@ if (existsSync(ledgerPath)) {
   notes.push(`ledger: ${lines} event(s), last written ${age}s ago`)
 } else {
   warnings.push('ledger is empty — record-activity has not written anything yet')
+}
+
+// ── 7. Conventions ─────────────────────────────────────────────────────────────
+//
+// The agents are deliberately generic; this file is the only thing that grounds them in your project.
+// A scaffold nobody filled in is worse than no file, because the agents will follow it.
+const conventionsPath = join(root, 'CONVENTIONS.md')
+
+if (existsSync(conventionsPath)) {
+  const text = readFileSync(conventionsPath, 'utf8')
+
+  // A SENTINEL, not a heuristic. The first version of this check measured "characters remaining after
+  // stripping comments" and passed a completely untouched scaffold at 1,273 characters, because
+  // headings and empty table skeletons are still characters. A marker the user must delete is the only
+  // thing that reliably distinguishes "filled in" from "looks filled in".
+  if (text.includes('harness:scaffold')) {
+    warnings.push(
+      'CONVENTIONS.md is still the scaffold — the harness:scaffold marker is present. The agents read ' +
+        'it as the authority on this project, so fill in what is true, DELETE every section you do not ' +
+        'fill, and remove the marker. An unfilled section is worse than an absent one.'
+    )
+  } else {
+    const filled = text.replace(/<!--[\s\S]*?-->/g, '').trim().length
+
+    notes.push(`conventions: CONVENTIONS.md (${filled} chars)`)
+  }
+} else if (existsSync(join(root, '.claude/agents'))) {
+  warnings.push('agents are installed but there is no CONVENTIONS.md — they will plan without project knowledge')
+}
+
+// ── 8. Memory ──────────────────────────────────────────────────────────────────
+
+if (config.lessons?.enabled !== false) {
+  try {
+    const lessons = readdirSync(join(root, config.lessons.dir)).filter(name => name.endsWith('.md') && name !== 'README.md')
+
+    notes.push(`lessons: ${lessons.length}/${config.lessons.max}`)
+
+    if (lessons.length > config.lessons.max) {
+      problems.push(`${lessons.length} lessons, cap is ${config.lessons.max} — consolidate, graduate, or prune`)
+    }
+  } catch {
+    /* no lessons directory yet is the normal starting state */
+  }
+}
+
+if (config.candidates?.enabled !== false) {
+  try {
+    const count = readFileSync(join(root, config.statePaths.candidates), 'utf8').split('\n').filter(Boolean).length
+    const due = count >= (config.candidates.reviewAt ?? 15)
+
+    notes.push(`candidates: ${count}/${config.candidates.reviewAt}${due ? '  REVIEW DUE' : ''}`)
+  } catch {
+    /* nothing captured yet */
+  }
 }
 
 // ── Report ─────────────────────────────────────────────────────────────────────
