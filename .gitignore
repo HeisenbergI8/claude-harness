@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+*.log
+
+# Harness runtime state, if this repo ever installs the harness into itself.
+# The config at the root is tracked; this is not.
+.claude/.harness/

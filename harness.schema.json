@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/johnrossrivera/claude-harness/harness.schema.json",
+  "title": "claude-harness configuration",
+  "description": "Declares what verification means for this project. Belongs at the repository root, in version control.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "commands": {
+      "type": "object",
+      "description": "The project's verification commands. The only required section.",
+      "additionalProperties": { "type": ["string", "null"] },
+      "properties": {
+        "verify": {
+          "type": ["string", "null"],
+          "description": "The closing gate: what the project runs when it wants to know the tree is healthy."
+        },
+        "verifyFast": {
+          "type": ["string", "null"],
+          "description": "Runs at the end of every turn, so it must be fast. Falls back to `verify` when unset."
+        }
+      }
+    },
+    "verifyTimeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "description": "How long verify-gate waits for verifyFast before standing aside."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Repo-relative globs that count as source. Replaces the default list; does not extend it."
+        },
+        "exclude": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "patterns": {
+          "type": "array",
+          "description": "Extra command-to-kind mappings, checked before the builtin catalog.",
+          "items": {
+            "type": "object",
+            "required": ["kind", "match"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "type": "string", "description": "Ledger event kind, e.g. test, lint, typecheck." },
+              "match": { "type": "string", "description": "JavaScript regex source, matched case-insensitively." }
+            }
+          }
+        },
+        "useBuiltins": {
+          "type": "boolean",
+          "description": "Set false to recognise only your own patterns plus those derived from `commands`."
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verifyGate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "maxSameFailure": {
+              "type": "integer",
+              "minimum": 2,
+              "description": "Attempts against one unchanged failure signature before the loop halts."
+            }
+          }
+        },
+        "claimCheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "maxBlocks": { "type": "integer", "minimum": 1 },
+            "extraClaimPatterns": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "loopBreaker": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "injectAt": { "type": "integer", "minimum": 1 },
+            "blockAt": { "type": "integer", "minimum": 2 }
+          }
+        },
+        "heartbeat": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean" } }
+        }
+      }
+    },
+    "readOnlyAgents": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Agents exempt from the repair loop because they cannot write source."
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "dir": { "type": "string" } }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "./harness.schema.json",
+
+  "//": "Every key below is optional except `commands`. Delete anything you are not changing — the defaults in .claude/harness/config.mjs are the documentation, and a config that restates them just drifts from them.",
+
+  "commands": {
+    "//": "The closing gate. Whatever your project runs when it wants to know the tree is healthy.",
+    "verify": "npm run verify",
+
+    "//verifyFast": "Runs at the end of EVERY turn, so it must be fast. A subset of `verify` — typecheck only, or the unit tests without the slow integration layer. Falls back to `verify` when unset, which is usually too slow.",
+    "verifyFast": "npm run typecheck"
+  },
+
+  "//verifyTimeoutMs": "How long verify-gate waits before standing aside. A gate that hangs is worse than a gate that misses.",
+  "verifyTimeoutMs": 120000,
+
+  "//source": "What counts as source for 'you edited source and verified nothing'. Repo-relative globs; `**` crosses directory separators, `*` does not. Providing `include` REPLACES the default list rather than extending it.",
+  "source": {
+    "include": ["src/**", "lib/**", "tests/**"],
+    "exclude": ["**/*.md", "**/__snapshots__/**"]
+  },
+
+  "//evidence": "Which shell commands count as evidence about the health of the tree. Your `commands` are recognised automatically; add anything else you run that should be treated as verification. `match` is a JavaScript regex source string, matched case-insensitively.",
+  "evidence": {
+    "patterns": [
+      { "kind": "test", "match": "bazel\\s+test\\s+//" },
+      { "kind": "contract", "match": "npm\\s+run\\s+check:contracts\\b" }
+    ],
+    "useBuiltins": true
+  },
+
+  "gates": {
+    "verifyGate": {
+      "enabled": true,
+      "//maxSameFailure": "Attempts against ONE unchanged failure signature before the loop halts. Different failures reset the count — progress is never punished.",
+      "maxSameFailure": 3
+    },
+    "claimCheck": {
+      "enabled": true,
+      "//maxBlocks": "Consecutive blocks before the gate stands aside. It must never be able to trap a session.",
+      "maxBlocks": 2,
+      "//extraClaimPatterns": "Additional regexes that mean 'I am asserting a gate is green'. Keep them narrow: hedged language must pass.",
+      "extraClaimPatterns": ["\\bship\\s+it\\b.{0,20}\\bgreen\\b"]
+    },
+    "loopBreaker": { "enabled": true, "injectAt": 2, "blockAt": 3 },
+    "heartbeat": { "enabled": true }
+  },
+
+  "//readOnlyAgents": "Agents with no write access to source. They are exempt from the repair loop, because blocking them demands a fix they cannot make — and every block replays their whole context. Names match the `name:` in the agent's frontmatter.",
+  "readOnlyAgents": ["tester", "auditor", "change-auditor", "Explore"],
+
+  "//state": "Everything the harness writes at runtime. One directory, trivial to gitignore or wipe.",
+  "state": { "dir": ".claude/.harness" }
+}

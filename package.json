@@ -1,0 +1,19 @@
+{
+  "name": "claude-harness",
+  "version": "0.1.0",
+  "description": "Mechanical evidence and gates for Claude Code: a per-turn activity ledger, a claim checker that blocks unsupported 'tests pass', and a repair loop that escalates on stuck failures rather than on retries.",
+  "keywords": ["claude", "claude-code", "hooks", "agent", "guardrails", "verification", "llm"],
+  "license": "MIT",
+  "author": "John Ross Rivera",
+  "repository": { "type": "git", "url": "https://github.com/johnrossrivera/claude-harness.git" },
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "bin": { "claude-harness": "bin/harness-init.mjs" },
+  "files": ["bin/", "template/", "harness.schema.json", "harness.config.example.json", "docs/", "README.md", "LICENSE"],
+  "scripts": {
+    "init": "node bin/harness-init.mjs",
+    "test": "node --test test/",
+    "verify": "npm test"
+  },
+  "dependencies": {}
+}
