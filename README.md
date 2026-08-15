@@ -441,6 +441,10 @@ node .claude/harness/cost.mjs --verbose    # per transcript
 
 node .claude/harness/agent-eval.mjs        # grade the graders
 node .claude/harness/agent-eval.mjs --agent tester --verbose
+
+node .claude/harness/plan-lint.mjs         # score every plan, worst first
+node .claude/harness/plan-lint.mjs --json --stamp 2026-08-15 > before.json
+node .claude/harness/plan-lint.mjs --compare before.json after.json
 ```
 
 Every gate here spends money to protect something — a hook that fires on every turn, a subagent whose
@@ -478,6 +482,22 @@ its allowlist. Four rules keep it honest:
 - **Unparseable is not clean.** A report stating a score whose rubric cannot be read is reported as
   unreadable, never counted as passing.
 - **Advisory, always.** It reports on history, and history cannot be fixed by failing a build.
+
+`plan-lint` answers the question that decides whether a prompt change was worth making. `verify-plan
+--lint` already grades one plan's checks; this scores **every** plan, saves the scoring as JSON, and
+diffs two of them — *"unverifiable steps fell from 15% to 4% across 19 plans"*. **A number written down
+once is a measurement; a number you can re-take and difference is an instrument.** Run against 19 real
+plans it found 473 steps, 56% of them gated on a check that cannot report failure.
+
+Three things keep the instrument honest:
+
+- **A directory with no plan document is excluded, never scored as zero.** "No plan" and "a plan whose
+  checks are weak" are different facts, and averaging them hides both.
+- **Comparing two different plan sets is the easy way to fake an improvement** — deleting the worst plan
+  moves every average the right way while changing nothing about the architect. The compare names what
+  was added and removed, and computes the common subset separately.
+- **The timestamp is passed in, never generated.** Two scorings of identical plans must be identical
+  files, or the diff is noise.
 
 ## Troubleshooting
 

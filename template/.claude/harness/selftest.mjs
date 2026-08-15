@@ -42,7 +42,8 @@ const SCRIPTS = [
   'transcripts.mjs',
   'cost.mjs',
   'agent-eval.mjs',
-  'preflight.mjs'
+  'preflight.mjs',
+  'plan-lint.mjs'
 ]
 
 const problems = []
