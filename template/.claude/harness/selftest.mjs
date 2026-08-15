@@ -38,7 +38,9 @@ const SCRIPTS = [
   'build-trigger.mjs',
   'lessons.mjs',
   'lesson-prompt.mjs',
-  'candidates.mjs'
+  'candidates.mjs',
+  'transcripts.mjs',
+  'cost.mjs'
 ]
 
 const problems = []

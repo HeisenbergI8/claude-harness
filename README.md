@@ -413,6 +413,34 @@ behind it — recurrence, non-obviousness, behaviour change, real cost — becau
 how a curated store becomes a log. If you were expecting an agent that silently rewrites its own memory,
 this is not that, on purpose.
 
+## Reporting: what this costs, and whether it is working
+
+Two commands. Neither is a gate — they read what already happened and print it.
+
+```bash
+node .claude/harness/cost.mjs              # tokens and dollars, per agent
+node .claude/harness/cost.mjs --verbose    # per transcript
+```
+
+Every gate here spends money to protect something — a hook that fires on every turn, a subagent whose
+whole context is replayed when it is blocked, a verify command re-run at each phase boundary. Whether
+that trade is worth it is unanswerable without a number, and until now there was no number.
+
+The figures come from Claude Code's own session transcripts, not from the ledger: **the hook payload
+carries no usage data at all.** Two details in that reader are load-bearing and neither is guessable:
+
+- **One request writes many transcript lines**, each repeating the same `usage` object — measured on
+  this repository, 105 assistant entries carrying 41 distinct `requestId`s. Summing per line reports
+  2.6x the true spend. The dedup is not a refinement; without it the number is wrong by more than the
+  decisions it would inform.
+- **Cache tokens are most of the bill**, and the two write TTLs are priced differently (reads 0.1x the
+  input rate, 5-minute writes 1.25x, 1-hour writes 2x). Collapsing them understates a long-TTL session
+  on every cached byte.
+
+The price table is a **dated snapshot with its source written next to it**, not a live lookup — and a
+model missing from it is counted and named rather than silently priced at zero, because a table that
+needs updating should not quietly produce a smaller bill.
+
 ## Troubleshooting
 
 The three that account for almost everything:
