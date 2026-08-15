@@ -7,8 +7,38 @@ import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { confirmCommands } from '../bin/harness-init.mjs'
 import { classifyProbe, probeCommand } from '../template/.claude/harness/config.mjs'
 import { REPO, makeRepo } from './helpers.mjs'
+
+// A fake readline. `confirmCommands` takes its interface as a parameter precisely so the prompt flow
+// is testable without allocating a pty.
+const fakeRl = answers => {
+  const queue = [...answers]
+
+  return {
+    asked: [],
+    question(prompt) {
+      this.asked.push(prompt)
+
+      if (!queue.length) return Promise.reject(new Error('Aborted with Ctrl+D'))
+
+      return Promise.resolve(queue.shift())
+    }
+  }
+}
+
+const silently = async body => {
+  const original = console.log
+
+  console.log = () => {}
+
+  try {
+    return await body()
+  } finally {
+    console.log = original
+  }
+}
 
 // ── classification ─────────────────────────────────────────────────────────────
 
@@ -162,6 +192,85 @@ test('selftest --probe fails on a command that cannot run', () => {
 
     // ...and without the flag the same repo still passes, so the cost stays opt-in.
     assert.equal(runSelftest(repo.root).code, 0)
+  } finally {
+    repo.cleanup()
+  }
+})
+
+// ── the setup prompt ───────────────────────────────────────────────────────────
+
+test('pressing Enter keeps the detected command', async () => {
+  const rl = fakeRl(['', ''])
+  const { commands, aborted } = await silently(() =>
+    confirmCommands({ verify: 'node --version', verifyFast: 'node --version' }, rl)
+  )
+
+  assert.equal(aborted, false)
+  assert.deepEqual(commands, { verify: 'node --version', verifyFast: 'node --version' })
+})
+
+test('a typed command replaces the detected one', async () => {
+  const rl = fakeRl(['node -e "process.exit(0)"', ''])
+  const { commands } = await silently(() => confirmCommands({ verify: 'node --version', verifyFast: 'node --version' }, rl))
+
+  assert.equal(commands.verify, 'node -e "process.exit(0)"')
+  assert.equal(commands.verifyFast, 'node --version')
+})
+
+// The point of asking at all: a detected command that cannot run gets a second chance in the moment,
+// rather than being discovered at the end of the user's first turn.
+test('an unrunnable answer is re-asked, and the correction is kept', async () => {
+  const rl = fakeRl(['definitely-not-a-real-binary-93417', 'node --version', ''])
+  const { commands } = await silently(() => confirmCommands({ verify: null, verifyFast: 'node --version' }, rl))
+
+  assert.equal(commands.verify, 'node --version', 'the working replacement must win')
+  assert.equal(rl.asked.length, 3, 'a broken command must be asked about twice')
+})
+
+test('a command kept despite not running is still recorded', async () => {
+  const rl = fakeRl(['definitely-not-a-real-binary-93417', '', ''])
+  const { commands } = await silently(() => confirmCommands({ verify: null, verifyFast: 'node --version' }, rl))
+
+  assert.equal(commands.verify, 'definitely-not-a-real-binary-93417', 'the user overrides the check')
+})
+
+test('nothing typed and nothing detected leaves the command unset', async () => {
+  const rl = fakeRl(['', ''])
+  const { commands } = await silently(() => confirmCommands({ verify: null, verifyFast: null }, rl))
+
+  assert.deepEqual(commands, { verify: null, verifyFast: null })
+})
+
+// THE BUG THIS PINS: the first version let a closed stdin reject out of main(), which exited 1 with
+// the scripts already copied and no config written — an install left half-done by pressing Ctrl+D.
+test('an aborted prompt keeps the detected commands instead of failing', async () => {
+  const rl = fakeRl([]) // rejects on the very first question
+  const { commands, aborted } = await silently(() =>
+    confirmCommands({ verify: 'npm test', verifyFast: 'npm run lint' }, rl)
+  )
+
+  assert.equal(aborted, true)
+  assert.deepEqual(commands, { verify: 'npm test', verifyFast: 'npm run lint' }, 'detection is the fallback')
+})
+
+test('an abort partway through keeps the answers already given', async () => {
+  const rl = fakeRl(['node --version']) // answers verify, then rejects on verifyFast
+  const { commands, aborted } = await silently(() => confirmCommands({ verify: null, verifyFast: 'npm run lint' }, rl))
+
+  assert.equal(aborted, true)
+  assert.equal(commands.verify, 'node --version')
+  assert.equal(commands.verifyFast, 'npm run lint')
+})
+
+test('a non-interactive install never prompts', () => {
+  const repo = makeRepo({ packageJson: { name: 'x', scripts: { test: 'node --version' } } })
+
+  try {
+    // stdio: 'pipe' means no TTY, which is what CI and this suite look like.
+    const output = execFileSync('node', [join(REPO, 'bin/harness-init.mjs'), repo.root], { encoding: 'utf8', stdio: 'pipe' })
+
+    assert.doesNotMatch(output, /needs two commands/)
+    assert.match(output, /Open harness.config.json/, 'without a prompt, the config edit must be step 1')
   } finally {
     repo.cleanup()
   }

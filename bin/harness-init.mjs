@@ -6,6 +6,7 @@
 //   node bin/harness-init.mjs --upgrade        refresh the scripts only; never touch config or settings
 //   node bin/harness-init.mjs --force          also overwrite an existing harness.config.json
 //   node bin/harness-init.mjs --no-probe       skip running the detected commands to check they work
+//   node bin/harness-init.mjs --yes            accept every detected value; never prompt
 //
 // ── TWO RULES THIS FILE OBEYS ──────────────────────────────────────────────────
 //
@@ -20,6 +21,7 @@
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 
 import { probeCommand } from '../template/.claude/harness/config.mjs'
@@ -35,6 +37,11 @@ const dryRun = flags.has('--dry-run')
 const upgrade = flags.has('--upgrade')
 const force = flags.has('--force')
 const probe = !flags.has('--no-probe') && !dryRun
+
+// Prompting requires a real terminal on BOTH ends. `npx` from a shell has one; a CI job, a pipe, and
+// the test suite do not — and there the old non-interactive behaviour is not a fallback but the
+// correct answer, so this is checked rather than attempted and rescued.
+const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !flags.has('--yes') && !dryRun && !upgrade
 
 const changes = []
 const log = message => console.log(message)
@@ -275,7 +282,98 @@ export const ensureGitignore = (text, entry) => {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-const main = () => {
+// ── Asking, instead of telling someone to go and edit JSON ─────────────────────
+//
+// These two commands ARE the gate — everything else in this repo is machinery for deciding when to run
+// them. Detection gets them right often enough to be worth doing, and wrong often enough that its
+// output cannot be the final answer.
+//
+// The version of this that only PRINTED its guess and pointed at `harness.config.json` was asking
+// somebody who had just installed the tool to already know what the tool wanted. Asking costs one line
+// each and removes the config file from the setup path entirely.
+const PROMPTS = {
+  verify: ['Full check', 'Run when you want to know the whole tree is healthy. Usually your test suite.'],
+  verifyFast: ['Fast check', 'Runs at the END OF EVERY TURN, so it has to be quick — a typecheck, or unit tests only.']
+}
+
+const describe = result => {
+  if (result.verdict === 'missing') return `does not run — ${result.detail}`
+  if (result.verdict === 'fail') return `runs (exit ${result.status} — your tree is red, which is fine here)`
+  if (result.verdict === 'slow') return 'runs (still going after 15s, so it exists)'
+  if (result.verdict === 'skipped') return 'not checked — it runs the selftest'
+
+  return 'runs'
+}
+
+export const confirmCommands = async (detected, rl) => {
+  log('\nThe harness needs two commands. Press Enter to accept a suggestion, or type your own.')
+  log('Neither is permanent — both live in harness.config.json.')
+
+  const commands = {}
+
+  // Ctrl+D, Ctrl+C, or a closed stdin must not fail the install. Everything before this point is
+  // already on disk, and abandoning the run there would leave the scripts installed with no config —
+  // a worse state than the one the detected defaults give, which is a complete and working install.
+  let aborted = false
+
+  const askOnce = async prompt => {
+    if (aborted) return ''
+
+    try {
+      return (await rl.question(prompt)).trim()
+    } catch {
+      aborted = true
+
+      return ''
+    }
+  }
+
+  for (const key of ['verify', 'verifyFast']) {
+    const [title, help] = PROMPTS[key]
+    let current = detected[key]
+
+    if (!aborted) log(`\n  ${title} — ${help}`)
+
+    // Two passes. One is not enough to correct a bad guess; three is nagging somebody who has already
+    // said they want to keep it.
+    for (let attempt = 0; attempt < 2 && !aborted; attempt += 1) {
+      const answer = await askOnce(`  ${current ? `[${current}]` : '(nothing detected)'} > `)
+
+      if (aborted) break
+
+      const chosen = answer || current
+
+      if (!chosen) {
+        log('    left unset — the gate that needs it will stand aside until you fill it in')
+        break
+      }
+
+      current = chosen
+
+      if (!probe) break
+
+      const result = probeCommand(chosen, { cwd: target })
+
+      log(`    ${describe(result)}`)
+
+      if (result.runnable) break
+
+      log(
+        attempt === 0
+          ? '    That would block every turn. Type one that works here, or press Enter to keep it anyway.'
+          : '    Kept. Fix it in harness.config.json before your first turn.'
+      )
+    }
+
+    commands[key] = current ?? null
+  }
+
+  if (aborted) log('\n  (no answer — keeping the detected commands)')
+
+  return { commands, aborted }
+}
+
+const main = async () => {
   if (!existsSync(TEMPLATE)) {
     console.error(`Template directory missing: ${TEMPLATE}`)
     process.exit(1)
@@ -321,6 +419,26 @@ const main = () => {
   const configPath = join(target, 'harness.config.json')
   const configExists = existsSync(configPath)
   const detected = detect(target)
+
+  // Asked BEFORE the config is written, so the answer is what lands on disk. Skipped when a config
+  // already exists — that file is the user's, and re-prompting for values they have already tuned is
+  // the same clobbering mistake as overwriting it.
+  let confirmed = false
+
+  if (interactive && (!configExists || force)) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+
+    try {
+      const answers = await confirmCommands(detected.commands, rl)
+
+      detected.commands = answers.commands
+      // An abandoned prompt leaves the commands unverified, so the printed check below still earns
+      // its place. Only a completed pass makes it redundant.
+      confirmed = !answers.aborted
+    } finally {
+      rl.close()
+    }
+  }
 
   if (configExists && !force) {
     record('keep', 'harness.config.json  (exists — pass --force to overwrite)')
@@ -379,7 +497,9 @@ const main = () => {
   // who already knows what it should say — which is nobody installing this for the first time.
   const broken = []
 
-  if (probe && (detected.commands.verify || detected.commands.verifyFast)) {
+  // `confirmed` means each command was already probed as it was chosen, and repeating it here would
+  // run the test suite a second time to print what the user just watched happen.
+  if (probe && !confirmed && (detected.commands.verify || detected.commands.verifyFast)) {
     log('\nChecking those commands actually run:')
 
     for (const [name, command] of [['verify', detected.commands.verify], ['verify:fast', detected.commands.verifyFast]]) {
@@ -421,14 +541,27 @@ const main = () => {
   }
 
   log('\nNext:')
-  log('  1. Open harness.config.json and check the two commands are the ones you actually run.')
-  log('  2. FILL IN CONVENTIONS.md — and delete every section you do not fill.')
-  log('     The agents read it as the authority on this project. A scaffold left as-is is worse than')
-  log('     no file at all, because they will follow it.')
-  log('  3. Commit both. They define what "verified" and "correct" mean here, so they belong in a diff.')
-  log('  4. RESTART your Claude Code session — hooks are read at startup and will not fire until you do.')
-  log('  5. Run one turn, then `node .claude/harness/selftest.mjs` to confirm the hooks actually fired.')
-  log('\n     "Configured" and "firing" are different states. Step 5 is the one that tells them apart.')
+
+  if (!confirmed) {
+    log('  1. Open harness.config.json and check the two commands are the ones you actually run.')
+  }
+
+  log(`  ${confirmed ? 1 : 2}. RESTART your Claude Code session. Hooks are read at startup, so until you do,`)
+  log('     nothing you just installed is running. This is the step people skip.')
+  log(`  ${confirmed ? 2 : 3}. Take one ordinary turn, then check the harness is actually alive:`)
+  log('       node .claude/harness/selftest.mjs')
+  log('     Ending in "ok" means the gates are real. "Configured" and "firing" are different states,')
+  log('     and this is the only thing that tells them apart.')
+  log(`  ${confirmed ? 3 : 4}. Fill in CONVENTIONS.md when you have ten minutes — four short sections.`)
+  log('     Delete any you cannot fill honestly; a half-filled scaffold is worse than none, because')
+  log('     the agents follow whatever it says.')
+  log(`  ${confirmed ? 4 : 5}. Commit harness.config.json and CONVENTIONS.md. They define what "verified" and`)
+  log('     "correct" mean here, so they belong in a diff.')
 }
 
-if (process.argv[1]?.endsWith('harness-init.mjs')) main()
+if (process.argv[1]?.endsWith('harness-init.mjs')) {
+  main().catch(error => {
+    console.error(`\nharness-init failed: ${error.message}`)
+    process.exit(1)
+  })
+}

@@ -25,25 +25,37 @@ cd /path/to/your/project
 npx github:HeisenbergI8/claude-harness init
 ```
 
-It detects your project type, writes `harness.config.json`, installs the hooks, and then **runs your
-two verify commands to check they can actually run.** Expect something like:
+It works out what kind of project this is, then **asks you to confirm the only two things it needs** —
+and runs each one to prove it works before writing it down:
 
 ```
-Detected project type: node
-  verify:      npm run test
-  verify:fast: npm run typecheck
+The harness needs two commands. Press Enter to accept a suggestion, or type your own.
+Neither is permanent — both live in harness.config.json.
 
-Checking those commands actually run:
-  verify:      runs, exit 0
-  verify:fast: runs, exit 0
+  Full check — Run when you want to know the whole tree is healthy. Usually your test suite.
+  [npm test] >
+    runs
+
+  Fast check — Runs at the END OF EVERY TURN, so it has to be quick — a typecheck, or unit tests only.
+  [npm run typecheck] >
+    does not run — sh: tsc: command not found
+    That would block every turn. Type one that works here, or press Enter to keep it anyway.
+  [npm run typecheck] > npm test
+    runs
 ```
 
-**If either one says `CANNOT RUN`, stop and fix it in `harness.config.json` before going on.** Those
-two commands *are* the gate — everything else is machinery for deciding when to run them. A command
-that cannot run looks exactly like a healthy install right up until it blocks every turn.
+Press Enter twice and you are done. **You never have to open a config file**, and a command that
+cannot run is caught while you are still looking at it rather than at the end of your first turn.
 
-A non-zero exit is fine here. It means the command ran and your tree is currently red, which is the
-normal thing this harness exists to tell you about.
+Two things worth knowing about that check:
+
+- `runs (exit 1 — your tree is red)` is **fine**. It means the command works and your tests are
+  currently failing, which is the normal thing this harness exists to tell you about.
+- `does not run` is **not** fine. Those two commands *are* the gate; everything else is machinery for
+  deciding when to run them.
+
+In a script or CI there is no terminal to prompt on, so it takes the detected values silently. Pass
+`--yes` to force that anywhere.
 
 ### 2. Restart Claude Code
 
@@ -61,11 +73,16 @@ node .claude/harness/selftest.mjs --probe
 Ending in `- harness selftest: ok` means the gates are real. Warnings are expected on a fresh install.
 A line starting `FAIL` is not — it names what is broken and what to do about it.
 
-### 4. Fill in `CONVENTIONS.md`, and delete every section you do not fill
+### 4. When you have ten minutes, fill in `CONVENTIONS.md`
 
-Optional on day one, but it is what separates a plan grounded in your code from plausible-sounding
-advice. **A half-filled scaffold is worse than no file**, because the agents will follow whatever it
-says. The selftest warns until you delete the marker line at the top.
+Four short sections: what the project is, its commands, where things live, and the traps someone new
+would fall into. The agents are deliberately generic — this is the only thing that grounds them in
+*your* code, and it is the difference between a plan built on what exists and one built on
+plausible-sounding advice.
+
+**Delete any section you cannot fill honestly.** A half-filled scaffold is worse than no file at all,
+because the agents follow whatever it says. The selftest keeps warning until you remove the marker
+line at the top, which is your cue that this step is still outstanding.
 
 ### What it looks like when it is working
 
@@ -156,10 +173,15 @@ It detects your project type (Node, Python, Go, Rust, Make), writes a starter `h
 copies the scripts to `.claude/harness/`, installs the agents and skills, scaffolds `CONVENTIONS.md`,
 and **merges** hooks into `.claude/settings.json` without touching anything already there.
 
-It then **executes the two commands it detected**, because detection is a guess and a guess that was
-never run is checked only by a reader who already knows the answer. A command that cannot run is
-reported as `CANNOT RUN` with what the shell said. A command that runs and *fails* is reported as
-fine — that is a red tree, not a broken setup. Pass `--no-probe` to skip this.
+On a terminal it **asks you to confirm the two commands** and executes each one as you choose it,
+because detection is a guess and a guess that was never run is checked only by a reader who already
+knows the answer. A command that cannot run is reported with what the shell said and you get a second
+chance at it. A command that runs and *fails* is reported as fine — that is a red tree, not a broken
+setup.
+
+With no terminal — CI, a pipe, `--yes` — it takes the detected values and prints the same check
+without prompting. `--no-probe` skips running the commands entirely. An existing `harness.config.json`
+is never re-prompted for; those values are yours.
 
 Running it twice changes nothing. **Agents, skills and `CONVENTIONS.md` are never overwritten** — not
 even with `--force`. Prompts get tuned in place, and silently replacing a tuned agent with the stock one
