@@ -420,6 +420,9 @@ Two commands. Neither is a gate — they read what already happened and print it
 ```bash
 node .claude/harness/cost.mjs              # tokens and dollars, per agent
 node .claude/harness/cost.mjs --verbose    # per transcript
+
+node .claude/harness/agent-eval.mjs        # grade the graders
+node .claude/harness/agent-eval.mjs --agent tester --verbose
 ```
 
 Every gate here spends money to protect something — a hook that fires on every turn, a subagent whose
@@ -440,6 +443,23 @@ carries no usage data at all.** Two details in that reader are load-bearing and 
 The price table is a **dated snapshot with its source written next to it**, not a live lookup — and a
 model missing from it is counted and named rather than silently priced at zero, because a table that
 needs updating should not quietly produce a smaller bill.
+
+`agent-eval` closes the other gap. Every gate here answers *"may this proceed?"* about the code; nothing
+answered *"is the agent that said yes telling the truth?"* A tester reports PASS and an auditor reports a
+number out of 100, and both are self-assessments no mechanism has ever checked. This is `claim-check`
+pointed at subagents — it reuses that gate's claim patterns rather than restating them — and it grades
+the agents listed in `readOnlyAgents`, because those are exactly the ones whose only output is a report.
+
+Run against 71 real subagent runs from the project this was extracted from, it found five audit reports
+whose rubric rows did not sum to the confidence score in their own header, and one tester write outside
+its allowlist. Four rules keep it honest:
+
+- **A `tool_use` block is an attempt, not an event.** A write blocked by `guard-write` reads as the guard
+  working, never as an offence.
+- **Findings carry their date.** A run that predates the rule it violates is history, not misconduct.
+- **Unparseable is not clean.** A report stating a score whose rubric cannot be read is reported as
+  unreadable, never counted as passing.
+- **Advisory, always.** It reports on history, and history cannot be fixed by failing a build.
 
 ## Troubleshooting
 

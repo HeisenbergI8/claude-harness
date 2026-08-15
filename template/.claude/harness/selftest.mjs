@@ -40,7 +40,8 @@ const SCRIPTS = [
   'lesson-prompt.mjs',
   'candidates.mjs',
   'transcripts.mjs',
-  'cost.mjs'
+  'cost.mjs',
+  'agent-eval.mjs'
 ]
 
 const problems = []
