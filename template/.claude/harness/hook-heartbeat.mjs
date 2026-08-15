@@ -151,7 +151,7 @@ export const readRegisteredHooks = settings => {
         const fromCommand = typeof hook.command === 'string' ? hook.command.match(/([\w./-]+\.mjs)/)?.[1] : null
         const script = fromArgs ?? fromCommand
 
-        if (script) registered.push({ event, name: script.split('/').pop().replace('.mjs', '') })
+        if (script) registered.push({ event, name: script.split(/[\\/]/).pop().replace('.mjs', '') })
       }
     }
   }

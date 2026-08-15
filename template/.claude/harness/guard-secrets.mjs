@@ -23,8 +23,11 @@ import { basename } from 'node:path'
 import { deny, readPayload } from './config.mjs'
 
 // Files whose whole purpose is holding credentials.
-export const SECRET_FILES = /(^|\/)(\.env(\.[\w-]+)?|\.netrc|\.pgpass|id_[rd]sa|id_ecdsa|id_ed25519|credentials|\.htpasswd)$/i
-const SECRET_DIRS = /(^|\/)\.(ssh|aws|gnupg|docker|kube)(\/|$)/i
+// Both separators throughout: unlike `guard-commit.mjs`, which reads paths from `git diff` and so
+// always sees forward slashes, these match command arguments and `tool_input.file_path` — which are
+// whatever the user's platform uses. Anchoring on `/` alone let `C:\Users\me\.env` through.
+export const SECRET_FILES = /(^|[\\/])(\.env(\.[\w-]+)?|\.netrc|\.pgpass|id_[rd]sa|id_ecdsa|id_ed25519|credentials|\.htpasswd)$/i
+const SECRET_DIRS = /(^|[\\/])\.(ssh|aws|gnupg|docker|kube)([\\/]|$)/i
 
 // `.env.example` and friends are the DOCUMENTED SHAPE of the config, with the values removed. They are
 // meant to be read and meant to be committed, and blocking them teaches people the guard is wrong about
@@ -34,13 +37,15 @@ const SECRET_DIRS = /(^|\/)\.(ssh|aws|gnupg|docker|kube)(\/|$)/i
 // had the exception in the commit guard only, so `cat .env.example` was refused while committing it was
 // fine — one rule, two files, fixed once. When you fix a rule like this, check its siblings the same
 // day.
-export const SECRET_FILE_EXCEPTIONS = /(^|\/)\.env\.(example|template|sample|dist|defaults?)$/i
+export const SECRET_FILE_EXCEPTIONS = /(^|[\\/])\.env\.(example|template|sample|dist|defaults?)$/i
 
 export const isSecretFile = path =>
   (SECRET_FILES.test(path) || SECRET_DIRS.test(path)) && !SECRET_FILE_EXCEPTIONS.test(path)
 
-// Commands that would print a file's contents into the transcript.
-const READERS = /^(cat|bat|less|more|head|tail|strings|xxd|od|nl|base64)$/
+// Commands that would print a file's contents into the transcript. `type` is cmd.exe's `cat` and
+// `get-content` is PowerShell's, so a Windows user reaches for them by default — omitting them left
+// the guard blind on the one platform nobody here develops on.
+const READERS = /^(cat|bat|less|more|head|tail|strings|xxd|od|nl|base64|type|get-content)$/
 
 // Literal credential shapes. Deliberately narrow — each is a real format, not an entropy heuristic,
 // because entropy heuristics fire on minified code and hashes and then get turned off.
@@ -75,7 +80,13 @@ export const inspectBash = command => {
 
   for (const segment of segments(command)) {
     const tokens = tokenize(segment)
-    const binary = unquote(tokens[0] ?? '').split('/').pop()
+    // Split on both separators and drop any Windows executable extension: otherwise `cat.exe` reduces
+    // to `cat.exe`, matches no known reader, and the guard stands aside on the command it watches for.
+    const binary = unquote(tokens[0] ?? '')
+      .split(/[\\/]/)
+      .pop()
+      .replace(/\.(exe|cmd|bat|com|ps1)$/i, '')
+      .toLowerCase()
 
     if (READERS.test(binary)) {
       for (const token of tokens.slice(1)) {

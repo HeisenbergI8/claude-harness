@@ -8,7 +8,7 @@ import { strict as assert } from 'node:assert'
 import { after, test } from 'node:test'
 
 import { inspect as inspectDestructive, splitCommands, tokenize } from '../template/.claude/harness/guard-destructive.mjs'
-import { findSecret, inspectBash, inspectWrite } from '../template/.claude/harness/guard-secrets.mjs'
+import { findSecret, inspectBash, inspectWrite, isSecretFile } from '../template/.claude/harness/guard-secrets.mjs'
 import { inspect as inspectCommit } from '../template/.claude/harness/guard-commit.mjs'
 import { isPermitted } from '../template/.claude/harness/guard-write.mjs'
 import { editPayload, makeRepo, runHook } from './helpers.mjs'
@@ -300,4 +300,45 @@ test('write guard: a huge single Write to a plan is refused with the protocol', 
   })
 
   assert.equal(edit, null)
+})
+
+// ── Windows path separators ────────────────────────────────────────────────────
+//
+// THE BUG THESE PIN: both guards reduce a command to its binary NAME before deciding anything. Doing
+// that with split('/') leaves a Windows path as one unsplittable token, which matches no known binary,
+// so the guard stands aside on precisely the command it exists to refuse. Nobody developing this on
+// macOS would ever see it.
+
+test('destructive guard sees through a windows path and an .exe suffix', () => {
+  assert.ok(inspectDestructive(String.raw`C:\tools\rm -rf /`), 'a backslash path must resolve to rm')
+  assert.ok(inspectDestructive(String.raw`C:\tools\rm.exe -rf /`), 'an .exe suffix must resolve to rm')
+  assert.ok(inspectDestructive(String.raw`C:\tools\RM.EXE -rf /`), 'the suffix match is case-insensitive')
+})
+
+test('secrets guard sees through a windows path and an .exe suffix', () => {
+  assert.ok(inspectBash(String.raw`C:\tools\cat.exe .env`), 'must resolve to cat')
+  assert.ok(inspectBash(String.raw`C:\Windows\System32\type.com .env`), 'the cmd.exe reader too')
+})
+
+// The extension strip must not eat a legitimate POSIX name. `execute` ends in nothing meaningful and
+// `notes.bat` as a FILE argument is not a binary, but a binary literally named `run.com` on Linux
+// would be reduced — accepted, because it is not a name any guard list contains.
+test('stripping a windows extension does not break ordinary posix commands', () => {
+  assert.equal(inspectDestructive('npm run build'), null)
+  assert.equal(inspectBash('cat README.md'), null)
+})
+
+// Windows paths reach these regexes from command arguments and tool_input.file_path, which are
+// platform-native — unlike guard-commit.mjs, which reads `git diff` output and always sees `/`.
+test('secret files are recognised through a windows path', () => {
+  assert.ok(isSecretFile(String.raw`C:\Users\me\.env`))
+  assert.ok(isSecretFile(String.raw`C:\Users\me\.ssh\id_rsa`))
+  assert.ok(isSecretFile(String.raw`C:\Users\me\.aws\credentials`))
+})
+
+// The exception has to survive the same change, or a Windows user is blocked from reading the very
+// file that is meant to be committed — which is how a guard teaches people to switch it off.
+test('the .env.example exception survives a windows path', () => {
+  assert.equal(isSecretFile(String.raw`C:\proj\.env.example`), false)
+  assert.equal(isSecretFile('.env.example'), false)
 })

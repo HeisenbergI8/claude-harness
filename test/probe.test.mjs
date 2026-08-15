@@ -76,6 +76,27 @@ test('a missing binary is not runnable, whatever the shell calls it', () => {
 
 // npm has reported a missing script on stdout in some versions, so reading stderr alone would miss the
 // single most likely misconfiguration this whole check exists for.
+// Windows is the platform least likely to be tested by hand here, so its wording is pinned rather than
+// assumed. `shell: true` runs cmd.exe on Windows, but Git Bash and WSL users are on sh, and a
+// PowerShell wrapper phrases it a third way — all three have to be recognised.
+test('windows shells report a missing binary in their own words', () => {
+  for (const stderr of [
+    "'tsc' is not recognized as an internal or external command,\r\noperable program or batch file.",
+    "The term 'tsc' is not recognized as the name of a cmdlet, function, script file, or operable program.",
+    "'tsc' is not recognized as a name of a cmdlet, function, script file, or operable program.",
+    'The system cannot find the path specified.',
+    'The system cannot find the file specified.'
+  ]) {
+    assert.equal(classifyProbe({ status: 1, stderr }).runnable, false, `should be unrunnable: ${stderr}`)
+  }
+})
+
+// cmd.exe uses 9009 where POSIX uses 127, and when it writes nothing usable the exit code is the only
+// thing left to read.
+test('cmd.exe exit 9009 is not runnable', () => {
+  assert.equal(classifyProbe({ status: 9009, stderr: '' }).verdict, 'missing')
+})
+
 test('a missing script is caught on stdout too', () => {
   assert.equal(classifyProbe({ status: 1, stdout: 'npm error Missing script: "typecheck"' }).runnable, false)
 })

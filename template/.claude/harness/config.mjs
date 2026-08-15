@@ -436,16 +436,25 @@ export const classifyCommand = (config, command) => {
 // finding here. The only thing being detected is "the shell could not find the thing to run". Those
 // two are indistinguishable in an exit code and obvious in stderr, which is why this reads output
 // rather than status alone.
+// Every shell says this differently, so the list is per-shell rather than per-cause. macOS and Linux
+// contribute the first two; Windows contributes the next three, because `shell: true` there runs
+// cmd.exe while a Git Bash or WSL user is on sh and a PowerShell wrapper phrases it a third way.
 export const NOT_RUNNABLE = [
-  /command not found/i,
-  /:\s*not found/i, // dash and ash phrase it differently from bash
-  /is not recognized as an internal or external command/i, // cmd.exe
+  /command not found/i, // bash, zsh
+  /:\s*not found/i, // dash, ash, Git Bash
+  /\bis not recognized as\b/i, // cmd.exe "...an internal or external command", PowerShell "...the name of a cmdlet"
+  /the system cannot find the (path|file) specified/i, // cmd.exe, bad path rather than bad name
+  /is not recognized as a name of a cmdlet/i, // older PowerShell wording
   /\bmissing script\b/i, // npm run <script that is not in package.json>
   /no such file or directory/i,
   /can'?t open file/i, // python path/that/does/not/exist.py
   /no rule to make target/i,
   /unknown command/i // cargo/go/deno subcommand that does not exist
 ]
+
+// 127 is the POSIX convention. 9009 is what cmd.exe returns for a name it could not resolve, and it is
+// the only signal when the shell wrote nothing usable to either stream.
+export const NOT_RUNNABLE_EXITS = new Set([127, 9009])
 
 // Pure, so the decision is testable without spawning anything.
 //
@@ -460,7 +469,7 @@ export const classifyProbe = ({ status = null, stderr = '', stdout = '', timedOu
   const output = `${stderr}\n${stdout}`
   const matched = NOT_RUNNABLE.find(pattern => pattern.test(output))
 
-  if (matched || status === 127) {
+  if (matched || NOT_RUNNABLE_EXITS.has(status)) {
     const line = output
       .split('\n')
       .map(text => text.trim())

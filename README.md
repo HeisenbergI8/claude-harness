@@ -18,6 +18,12 @@ npx github:HeisenbergI8/claude-harness init
 already working in the project you want to protect. This installs *into* a project — it is not a
 standalone tool.
 
+**macOS, Linux and Windows.** Everything is plain Node, and the hooks run `node` with an argument list
+rather than a shell string, so there is no shell to be incompatible with. On Windows the guards
+recognise `C:\...` paths, `.exe` and `.cmd` suffixes, and cmd.exe's `type` alongside `cat`; the setup
+check understands what cmd.exe and PowerShell say when a command does not exist. PowerShell, cmd.exe,
+Git Bash and WSL are all fine.
+
 ### 1. Install, from your project's root directory
 
 ```bash

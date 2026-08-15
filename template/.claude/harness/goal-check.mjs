@@ -22,7 +22,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { load } from './config.mjs'
@@ -38,7 +38,7 @@ export const resolvePlan = target => {
   const candidates = readdirSync(target).filter(name => name.endsWith('.md') && !name.startsWith('implementation-log'))
 
   // The plan document is named after its directory. Fall back to the only markdown file if not.
-  const named = candidates.find(name => name === `${target.split('/').pop()}.md`)
+  const named = candidates.find(name => name === `${basename(target)}.md`)
   const file = named ?? (candidates.length === 1 ? candidates[0] : null)
 
   return file ? { file: join(target, file), dir: target } : null

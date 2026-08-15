@@ -95,7 +95,21 @@ const binaryOf = segment => {
   if (!first) return ''
   if (/^[A-Za-z_]\w*=/.test(first)) return binaryOf(segment.replace(/^\s*[A-Za-z_]\w*=\S*\s+/, ''))
 
-  return unquote(first).split('/').pop()
+  // BOTH separators, always — not `sep` for the current platform. A guard that splits on `/` alone
+  // reads `C:\Program Files\Git\usr\bin\rm.exe` as one long token, matches no known binary, and stands
+  // aside on exactly the command it exists to refuse.
+  //
+  // The extension has to go for the same reason: every binary on Windows is `rm.exe` or `npm.cmd`, and
+  // a name list written as `rm` matches neither.
+  //
+  // Lowercased because Windows resolves command names case-insensitively, so `RM.EXE` and `rm` are the
+  // same program there. On POSIX they could in principle be different files, and this guard prefers the
+  // false refusal — which costs one explained block — to the miss, which costs the filesystem.
+  return unquote(first)
+    .split(/[\\/]/)
+    .pop()
+    .replace(/\.(exe|cmd|bat|com|ps1)$/i, '')
+    .toLowerCase()
 }
 
 // ── The decision, as a pure function ───────────────────────────────────────────
