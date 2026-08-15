@@ -152,6 +152,7 @@ So this harness records what happened and compares the claim against the record.
 | `verify-gate` | `Stop`, `SubagentStop` | Runs your fast check. Red tree → **block** → **escalate** → **HALT** with a written report |
 | `loop-breaker` | `PostToolUse` | Consecutive failures of one command. Warns at 2, blocks at 3, halts on a second block |
 | `review-gate` | `Stop` | Blocks **once** when source changed and the full gate went green but no review agent ran |
+| `gate-edit-check` | `PostToolUse` | Runs a fast check the moment a source file is written. Debounced, and **off unless you declare a command** |
 | `hook-heartbeat` | called by the others | Records that hooks fired and what their payloads carried |
 | `selftest` | you run it | Answers whether the harness is working or merely *installed* |
 

@@ -41,7 +41,11 @@ export const DEFAULTS = {
     // The mid-task gate. Must be fast enough to run at the end of EVERY turn, because that is exactly
     // what `verify-gate.mjs` does with it. If your full gate takes 10s, this one should take 3.
     // Falls back to `verify` when unset.
-    verifyFast: null
+    verifyFast: null,
+
+    // Runs at the moment a source file is written, debounced. Must be FASTER than verifyFast — a
+    // per-file typecheck, not the suite. Leave null and `gate-edit-check.mjs` never runs at all.
+    editCheck: null
   },
 
   // How long `verify-gate.mjs` waits for `verifyFast` before giving up and standing aside. A gate
@@ -80,7 +84,17 @@ export const DEFAULTS = {
     loopBreaker: { enabled: true, injectAt: 2, blockAt: 3 },
 
     // Records that hooks fired and what their payloads carried. Never blocks anything.
-    heartbeat: { enabled: true }
+    heartbeat: { enabled: true },
+
+    // Runs `commands.editCheck` right after a source edit. Early warning, never the boundary: a skip
+    // here can only DEFER a check, because verify-gate still runs on Stop and SubagentStop.
+    //
+    //   graceMs   wait, then stand down if a newer edit arrived — parallel tool calls in one message
+    //             otherwise run this against a half-applied refactor
+    //   windowMs  skip if the last run was GREEN and more recent than this. A RED result is never
+    //             suppressed: a broken tree needs to know the moment it goes green
+    //   paths     which files it applies to. Empty means "whatever `source` says is source"
+    editCheck: { enabled: true, graceMs: 400, windowMs: 15_000, paths: [] }
   },
 
   // Agents that CANNOT repair a red tree, because they have no write access to source. Blocking them
@@ -568,6 +582,7 @@ export const statePaths = config => {
     lessonsState: `${dir}/lessons-state.json`,
     lessonPromptState: `${dir}/lesson-prompt-state.json`,
     candidates: `${dir}/candidates.jsonl`,
+    editCheckState: `${dir}/edit-check-state.json`,
     runs: `${dir}/runs`,
     runPointer: `${dir}/runs/current.json`
   }

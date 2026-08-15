@@ -151,6 +151,46 @@ never escalates.
 
 ---
 
+## `gates.editCheck`
+
+```json
+{
+  "commands": { "editCheck": "tsc --noEmit -p tsconfig.json" },
+  "gates": { "editCheck": { "graceMs": 400, "windowMs": 15000, "paths": [] } }
+}
+```
+
+**Off unless `commands.editCheck` is set.** Runs that command right after a source file is written, so
+the class of defect hand edits and merges produce — an unbalanced tag, a dropped import — surfaces while
+the model still has the file in front of it rather than three edits later.
+
+It must be **faster than `verifyFast`**: a per-file or per-project typecheck, not the suite.
+
+A check on every edit is a check that runs many times a turn, most of them worthless. Measured on 269
+edits in one session of the project this came from: a full typecheck per edit was 2.11s each, 568s
+total, and two facts made most of those runs pointless — 31% of edits landed within 0.4s of another
+(parallel tool calls in one message, so the check ran on a half-applied refactor and blocked on errors
+the very next edit was about to fix), and the median gap between edits was 10.7s.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `graceMs` | `400` | Wait, then stand down if a newer edit arrived — the later hook has the more complete tree |
+| `windowMs` | `15000` | Skip if the last run was **green** and more recent than this |
+| `paths` | `[]` | Which files it applies to. Empty means whatever `source` already says is source |
+
+**Every skip fails safe.** A suppressed check can only *defer* a check, never approve a broken tree —
+`verify-gate` still runs on `Stop` and `SubagentStop`, and `implement-plan` gates every phase boundary.
+This is early warning; those are the boundary.
+
+**A red result is never suppressed.** Failure clears the green timestamp, so the next edit checks
+immediately: a broken tree gets fast feedback, a healthy one does not.
+
+A command that cannot *start* stands aside rather than blocking, using the same classifier the installer
+uses to tell "the binary is missing" from "your tree is red". Blocking every edit forever over a setup
+mistake is how a gate gets ripped out.
+
+---
+
 ## `readOnlyAgents`
 
 ```json

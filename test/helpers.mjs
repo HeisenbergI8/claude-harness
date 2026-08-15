@@ -3,7 +3,7 @@
 // own tests worthless.
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -12,7 +12,11 @@ export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const HARNESS_SRC = join(REPO, 'template/.claude/harness')
 
 export const makeRepo = ({ config, packageJson } = {}) => {
-  const root = mkdtempSync(join(tmpdir(), 'claude-harness-test-'))
+  // realpathSync, because on macOS `tmpdir()` is `/var/folders/...` — a symlink to
+  // `/private/var/folders/...` — and a child process reports the RESOLVED form as its cwd. A fixture
+  // handing out the unresolved path makes every absolute file_path look like it is outside the repo,
+  // and the hook under test then skips for a reason that has nothing to do with what is being tested.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'claude-harness-test-')))
 
   mkdirSync(join(root, '.claude'), { recursive: true })
 

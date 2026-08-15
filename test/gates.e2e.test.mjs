@@ -248,6 +248,9 @@ test('selftest passes once every gate has actually fired', () => {
   runHook(repo, 'claim-check.mjs', stopPayload({}), { env: live })
   runHook(repo, 'review-gate.mjs', stopPayload({}), { env: live })
   runHook(repo, 'task-driver.mjs', stopPayload({}), { env: live })
+  // Beats even with no editCheck command declared, which is the point: "registered but disabled" and
+  // "registered but broken" must not look the same to the selftest.
+  runHook(repo, 'gate-edit-check.mjs', editPayload({ file: repo.path('src/a.ts') }), { env: live })
 
   const { status, stdout } = spawnSelftest(repo)
 

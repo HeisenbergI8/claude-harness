@@ -19,19 +19,27 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/lessons.mjs", "inject"],
+            "args": [
+              ".claude/harness/lessons.mjs",
+              "inject"
+            ],
             "timeout": 15
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/candidates.mjs", "record"],
+            "args": [
+              ".claude/harness/candidates.mjs",
+              "record"
+            ],
             "timeout": 15
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/build-trigger.mjs"],
+            "args": [
+              ".claude/harness/build-trigger.mjs"
+            ],
             "statusMessage": "Task loop: reading /build",
             "timeout": 15
           }
@@ -45,13 +53,17 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/guard-write.mjs"],
+            "args": [
+              ".claude/harness/guard-write.mjs"
+            ],
             "timeout": 30
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/guard-secrets.mjs"],
+            "args": [
+              ".claude/harness/guard-secrets.mjs"
+            ],
             "timeout": 30
           }
         ]
@@ -62,20 +74,26 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/guard-destructive.mjs"],
+            "args": [
+              ".claude/harness/guard-destructive.mjs"
+            ],
             "timeout": 30
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/guard-secrets.mjs"],
+            "args": [
+              ".claude/harness/guard-secrets.mjs"
+            ],
             "statusMessage": "Checking for secrets",
             "timeout": 30
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/guard-commit.mjs"],
+            "args": [
+              ".claude/harness/guard-commit.mjs"
+            ],
             "statusMessage": "Checking the commit",
             "timeout": 180
           }
@@ -84,12 +102,28 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Write|Edit|NotebookEdit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              ".claude/harness/gate-edit-check.mjs"
+            ],
+            "statusMessage": "Checking the file you just edited",
+            "timeout": 180
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit|NotebookEdit|MultiEdit|Bash",
         "hooks": [
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/record-activity.mjs"],
+            "args": [
+              ".claude/harness/record-activity.mjs"
+            ],
             "timeout": 15
           }
         ]
@@ -100,7 +134,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/loop-breaker.mjs"],
+            "args": [
+              ".claude/harness/loop-breaker.mjs"
+            ],
             "timeout": 30
           }
         ]
@@ -113,13 +149,17 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/record-activity.mjs"],
+            "args": [
+              ".claude/harness/record-activity.mjs"
+            ],
             "timeout": 15
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/loop-breaker.mjs"],
+            "args": [
+              ".claude/harness/loop-breaker.mjs"
+            ],
             "timeout": 30
           }
         ]
@@ -131,19 +171,26 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/record-activity.mjs"],
+            "args": [
+              ".claude/harness/record-activity.mjs"
+            ],
             "timeout": 15
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/candidates.mjs", "finding"],
+            "args": [
+              ".claude/harness/candidates.mjs",
+              "finding"
+            ],
             "timeout": 15
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/verify-gate.mjs"],
+            "args": [
+              ".claude/harness/verify-gate.mjs"
+            ],
             "statusMessage": "Verifying subagent work",
             "timeout": 180
           }
@@ -156,34 +203,45 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/claim-check.mjs"],
+            "args": [
+              ".claude/harness/claim-check.mjs"
+            ],
             "statusMessage": "Checking claims against what ran",
             "timeout": 30
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/verify-gate.mjs"],
+            "args": [
+              ".claude/harness/verify-gate.mjs"
+            ],
             "statusMessage": "Verifying before finishing",
             "timeout": 180
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/review-gate.mjs"],
+            "args": [
+              ".claude/harness/review-gate.mjs"
+            ],
             "statusMessage": "Checking whether the reviewers ran",
             "timeout": 30
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/candidates.mjs", "reflect"],
+            "args": [
+              ".claude/harness/candidates.mjs",
+              "reflect"
+            ],
             "timeout": 15
           },
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/task-driver.mjs"],
+            "args": [
+              ".claude/harness/task-driver.mjs"
+            ],
             "statusMessage": "Task loop: deciding whether to continue",
             "timeout": 180
           }
@@ -194,7 +252,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": [".claude/harness/lesson-prompt.mjs"],
+            "args": [
+              ".claude/harness/lesson-prompt.mjs"
+            ],
             "statusMessage": "Checking for anything worth learning",
             "timeout": 30
           }

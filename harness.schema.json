@@ -9,15 +9,33 @@
     "commands": {
       "type": "object",
       "description": "The project's verification commands. The only required section.",
-      "additionalProperties": { "type": ["string", "null"] },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "properties": {
         "verify": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "The closing gate: what the project runs when it wants to know the tree is healthy."
         },
         "verifyFast": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "Runs at the end of every turn, so it must be fast. Falls back to `verify` when unset."
+        },
+        "editCheck": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Runs the moment a source file is written, debounced. Must be faster than verifyFast. Null (the default) means the edit gate never runs."
         }
       }
     },
@@ -32,10 +50,17 @@
       "properties": {
         "include": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Repo-relative globs that count as source. Replaces the default list; does not extend it."
         },
-        "exclude": { "type": "array", "items": { "type": "string" } }
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "evidence": {
@@ -47,11 +72,20 @@
           "description": "Extra command-to-kind mappings, checked before the builtin catalog.",
           "items": {
             "type": "object",
-            "required": ["kind", "match"],
+            "required": [
+              "kind",
+              "match"
+            ],
             "additionalProperties": false,
             "properties": {
-              "kind": { "type": "string", "description": "Ledger event kind, e.g. test, lint, typecheck." },
-              "match": { "type": "string", "description": "JavaScript regex source, matched case-insensitively." }
+              "kind": {
+                "type": "string",
+                "description": "Ledger event kind, e.g. test, lint, typecheck."
+              },
+              "match": {
+                "type": "string",
+                "description": "JavaScript regex source, matched case-insensitively."
+              }
             }
           }
         },
@@ -69,7 +103,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": { "type": "boolean" },
+            "enabled": {
+              "type": "boolean"
+            },
             "maxSameFailure": {
               "type": "integer",
               "minimum": 2,
@@ -81,35 +117,90 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": { "type": "boolean" },
-            "maxBlocks": { "type": "integer", "minimum": 1 },
-            "extraClaimPatterns": { "type": "array", "items": { "type": "string" } }
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxBlocks": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "extraClaimPatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "loopBreaker": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": { "type": "boolean" },
-            "injectAt": { "type": "integer", "minimum": 1 },
-            "blockAt": { "type": "integer", "minimum": 2 }
+            "enabled": {
+              "type": "boolean"
+            },
+            "injectAt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "blockAt": {
+              "type": "integer",
+              "minimum": 2
+            }
           }
         },
         "heartbeat": {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "enabled": { "type": "boolean" } }
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
         },
         "reviewGate": {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "enabled": { "type": "boolean" } }
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "editCheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Runs commands.editCheck right after a source edit. Early warning, never the boundary \u2014 every skip can only defer a check, because verify-gate still runs at the end of the turn.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "graceMs": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Wait this long, then stand down if a newer edit arrived. Parallel tool calls in one message otherwise check a half-applied refactor."
+            },
+            "windowMs": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Skip if the last run was GREEN and more recent than this. A red result is never suppressed."
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Which files it applies to. Empty means whatever `source` says is source."
+            }
+          }
         }
       }
     },
     "readOnlyAgents": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Agents exempt from the repair loop because they cannot write source."
     },
     "preflight": {
@@ -117,23 +208,29 @@
       "additionalProperties": false,
       "description": "Entry conditions, checked before a task-loop run spends an iteration.",
       "properties": {
-        "enabled": { "type": "boolean" },
+        "enabled": {
+          "type": "boolean"
+        },
         "cleanTree": {
           "type": "boolean",
           "description": "Refuse to start on a dirty tree, so this run's diff can be told apart from what was already there. Entry only, never re-checked mid-run. Untracked files are ignored deliberately."
         },
         "treeGreen": {
           "type": "boolean",
-          "description": "Refuse to start on a red tree, by running commands.verifyFast. Refuse, do not repair — a run that begins by fixing what it did not cause cannot say which part of its diff is its own work."
+          "description": "Refuse to start on a red tree, by running commands.verifyFast. Refuse, do not repair \u2014 a run that begins by fixing what it did not cause cannot say which part of its diff is its own work."
         },
         "reachable": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "URLs the work depends on. `${env:NAME}` resolves from the environment, and a target resolving to nothing is reported as UNSET rather than unreachable. Any HTTP response counts as reachable."
         },
         "commands": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Commands that must exit 0 before the loop starts, and between iterations."
         },
         "maxConsecutiveFailures": {
@@ -146,7 +243,11 @@
     "state": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "dir": { "type": "string" } }
+      "properties": {
+        "dir": {
+          "type": "string"
+        }
+      }
     }
   }
 }

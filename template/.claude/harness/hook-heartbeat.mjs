@@ -168,7 +168,18 @@ export const silentHooks = (registered, seen, instrumented) =>
 // The GUARDS are deliberately absent. They fire only when their tool is used, so "never fired" is the
 // normal state for a session that wrote no files or ran no shell commands — reporting that as death
 // would be a false alarm on every quiet session, and a false alarm is how an alarm gets ignored.
-export const INSTRUMENTED = ['claim-check', 'verify-gate', 'loop-breaker', 'record-activity', 'review-gate', 'task-driver']
+export const INSTRUMENTED = [
+  'claim-check',
+  'verify-gate',
+  'loop-breaker',
+  'record-activity',
+  'review-gate',
+  'task-driver',
+  // Beats BEFORE it reads its own config, so a project that has not declared `commands.editCheck`
+  // still shows a live hook rather than a dead one. "Registered but disabled" and "registered but
+  // broken" must not look the same here.
+  'gate-edit-check'
+]
 
 // ── CLI ────────────────────────────────────────────────────────────────────────
 

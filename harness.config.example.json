@@ -8,7 +8,10 @@
     "verify": "npm run verify",
 
     "//verifyFast": "Runs at the end of EVERY turn, so it must be fast. A subset of `verify` — typecheck only, or the unit tests without the slow integration layer. Falls back to `verify` when unset, which is usually too slow.",
-    "verifyFast": "npm run typecheck"
+    "verifyFast": "npm run typecheck",
+
+    "//editCheck": "Runs the moment a source file is written, debounced. Must be FASTER than verifyFast. Leave it out and the edit gate never runs at all — it is off by default.",
+    "editCheck": "npm run typecheck"
   },
 
   "//verifyTimeoutMs": "How long verify-gate waits before standing aside. A gate that hangs is worse than a gate that misses.",
@@ -43,7 +46,10 @@
       "extraClaimPatterns": ["\\bship\\s+it\\b.{0,20}\\bgreen\\b"]
     },
     "loopBreaker": { "enabled": true, "injectAt": 2, "blockAt": 3 },
-    "heartbeat": { "enabled": true }
+    "heartbeat": { "enabled": true },
+
+    "//editCheck": "Every skip here fails safe: it can only DEFER a check, never approve a broken tree, because verify-gate still runs at the end of the turn. graceMs stands down when a newer edit arrives — parallel tool calls otherwise check a half-applied refactor. windowMs skips only after a GREEN result; a red one is never suppressed.",
+    "editCheck": { "enabled": true, "graceMs": 400, "windowMs": 15000, "paths": [] }
   },
 
   "//preflight": "Entry conditions, checked BEFORE an iteration is spent. A precondition that lives as a line in a report is not a precondition: a human reading 'backend: no' stops, a loop reads it and spends its whole budget verifying loading skeletons. cleanTree and treeGreen are free and on by default; the two lists cost nothing while they are empty.",
