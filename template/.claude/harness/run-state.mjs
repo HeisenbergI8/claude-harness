@@ -118,6 +118,10 @@ export const init = ({ objective, label, planPath, sessionId, budget = {} }, con
     phaseIteration: 0,
     redIterations: 0,
     planlessIterations: 0,
+
+    // Consecutive failures of the between-iteration preconditions. It lives here rather than in
+    // preflight.mjs because that file answers "is this healthy right now", a question with no history.
+    preflightFailures: 0,
     spawns: 0,
     phaseCursor: null,
 

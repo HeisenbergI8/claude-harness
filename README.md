@@ -309,7 +309,7 @@ is answered by evidence instead of by hope.
   a row, and every honest sentence — "I have not run the tests yet", "the suite failed, here is the
   output" — must pass untouched. Those are pinned verbatim in `test/claim-check.test.mjs`.
 
-## Two more ideas, from the layers above the gates
+## Three more ideas, from the layers above the gates
 
 ### 5. "May be executed" and "is a valid gate" are different claims
 
@@ -340,9 +340,27 @@ exhausts one.
 Halts are therefore evaluated unconditionally, and only if none fire does the driver ask whether the
 tree is red.
 
+### 7. A precondition that lives in a report is not a precondition
+
+Reports carry lines like `backend reachable: yes | no` for a person to read, and a person reading "no"
+stops. **A loop reads it and carries on** — spending its entire budget verifying loading skeletons, where
+every screen renders, every check passes, and none of it means anything.
+
+So `preflight.mjs` runs before an iteration is spent: tree clean, tree green, and whatever the project
+declared it depends on. Three details are what make it survivable:
+
+- **Refuse, do not repair.** A run that begins by fixing what it did not cause can no longer say which
+  part of its own diff is its work — and *what did this run change* is the first question asked at halt
+  time.
+- **Untracked files are ignored, deliberately.** Refusing to start because someone left a `TODO.md`
+  around is how a check earns a reputation for being wrong and gets switched off.
+- **The check has no memory; the run record does.** `preflight` answers only *is this healthy right
+  now*. One flaky response is not evidence a dependency is down, so the counting lives in the run state
+  and two consecutive failures — not one — halt the loop.
+
 ## Two more, from containing an agent that runs unattended
 
-### 7. The defence is the absence of a shell, not a better filter
+### 8. The defence is the absence of a shell, not a better filter
 
 `verify-plan` executes the `**Verify:**` command attached to each plan step. **A plan is a document a
 model wrote.** Run its strings through a shell and the checker becomes an execution vector:
@@ -375,7 +393,7 @@ strings get no shell; user-authored strings do. Same reasoning produced the guar
 `git diff --cached` and never the commit message, because "a guard that parses the message rather than
 the index is theatre."
 
-### 8. Different actors deserve different failure directions
+### 9. Different actors deserve different failure directions
 
 `guard-write` **fails closed** for an agent with a rule: an unparseable payload or a missing
 `file_path` is denied, because "a guard that fails open produces confidence it has not earned."

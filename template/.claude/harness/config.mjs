@@ -179,6 +179,32 @@ export const DEFAULTS = {
     planlessCeiling: 3
   },
 
+  // Entry conditions, checked before a task-loop run spends an iteration. See preflight.mjs for why
+  // this is a gate rather than a line in a report.
+  preflight: {
+    enabled: true,
+
+    // Both of these are free and on by default. `cleanTree` is ENTRY ONLY — by iteration two the loop
+    // has been editing on purpose, so a dirty tree is the expected state rather than a fault.
+    cleanTree: true,
+    treeGreen: true,
+
+    // Anything the work depends on being up. `${env:NAME}` resolves from the environment; a value that
+    // resolves to nothing is reported as UNSET rather than unreachable, because those need different
+    // fixes. Any HTTP response counts as reachable — a root that 404s is still listening.
+    //   ["${env:API_BASE_URL}", "http://localhost:3000"]
+    reachable: [],
+
+    // Arbitrary commands that must exit 0 before the loop starts. A toolchain check, a migration
+    // status, a license probe.
+    commands: [],
+
+    // Consecutive failures of the between-iteration checks before the run halts. One flaky response is
+    // not evidence a dependency is down, and killing a four-hour run over a dropped connection is its
+    // own failure. The counting lives in the run record; preflight.mjs itself has no memory.
+    maxConsecutiveFailures: 2
+  },
+
   // Everything the harness writes at runtime. One directory so it is trivial to gitignore or wipe.
   state: { dir: '.claude/.harness' }
 }

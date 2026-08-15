@@ -166,6 +166,54 @@ Names match the `name:` in the agent's frontmatter, which is what arrives on the
 
 ---
 
+## `preflight`
+
+```json
+{
+  "preflight": {
+    "cleanTree": true,
+    "treeGreen": true,
+    "reachable": ["${env:API_BASE_URL}", "http://localhost:3000"],
+    "commands": ["npm run check:toolchain"],
+    "maxConsecutiveFailures": 2
+  }
+}
+```
+
+Entry conditions, checked **before** a task-loop run spends an iteration — by `/build` at the start, and
+by the driver between iterations for the two list-shaped checks.
+
+**A precondition that lives as a line in a report is not a precondition.** A person reading
+`backend: no` stops. A loop reads it, carries on, and spends its whole budget verifying loading
+skeletons — every screen renders, every check passes, and none of it means anything.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `enabled` | `true` | Set false and every check stands aside |
+| `cleanTree` | `true` | Refuse to start on a dirty tree. **Entry only** — never re-checked mid-run, because by iteration two the loop has been editing on purpose. Untracked files are ignored deliberately: refusing to start because someone left a `TODO.md` around is how this becomes the first check anyone disables |
+| `treeGreen` | `true` | Runs `commands.verifyFast`. **Refuse, do not repair** |
+| `reachable` | `[]` | URLs the work depends on. `${env:NAME}` resolves from the environment |
+| `commands` | `[]` | Anything that must exit 0 — a toolchain check, a migration status |
+| `maxConsecutiveFailures` | `2` | Consecutive between-iteration failures before the run halts |
+
+Three behaviours worth knowing:
+
+- **Refuse, do not repair.** A run that begins by fixing something it did not cause can no longer say
+  which part of its own diff is its work — and *what did this run change* is the first question asked at
+  halt time.
+- **Any HTTP response counts as reachable.** A service whose root 404s is still listening; only a
+  transport error or a timeout means it is not there. A `${env:NAME}` that resolves to nothing is
+  reported as **unset**, never as unreachable — those need different fixes, and reporting the second for
+  the first sends someone to check a server that is fine.
+- **Failures are counted, not immediate.** One flaky response is not evidence a dependency is down, and
+  killing a four-hour run over a dropped connection is its own failure. The count lives in the run
+  record; `preflight.mjs` itself has no memory, because it answers only *is this healthy right now*.
+
+`reachable` and `commands` are empty by default, and when both are empty the driver skips the check
+entirely — so a project that configures nothing pays nothing per turn.
+
+---
+
 ## `state`
 
 ```json

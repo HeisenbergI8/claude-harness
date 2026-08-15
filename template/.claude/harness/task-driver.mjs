@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url'
 
 import { block, load, readPayload } from './config.mjs'
 import { beat, foldBeats } from './hook-heartbeat.mjs'
+import { hasIterationChecks, preflight } from './preflight.mjs'
 import { activeRun, describeAttempts, halt, hashPlan, haltReportPath, update } from './run-state.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -106,7 +107,7 @@ const cachedSignals = (config, state) => {
 //
 // So: HALT CHECKS RUN UNCONDITIONALLY, with tree state irrelevant. Only if none fire does the drive
 // check look at whether the tree is red.
-export const decide = (state, { payload = {}, signals = null, treeGreen = true, now = Date.now(), config = null } = {}) => {
+export const decide = (state, { payload = {}, signals = null, treeGreen = true, now = Date.now(), config = null, preflight = null } = {}) => {
   // FAST PATH. Every ordinary turn has no active run, and this runs on every Stop forever.
   if (!state) return { action: 'release', why: 'no active run' }
   if (payload.stop_hook_active === true) return { action: 'release', why: 'stop hook already active' }
@@ -116,6 +117,7 @@ export const decide = (state, { payload = {}, signals = null, treeGreen = true, 
   const phaseStuckAt = loop.phaseStuckAt ?? 3
   const redCeiling = loop.redCeiling ?? 4
   const planlessCeiling = loop.planlessCeiling ?? 3
+  const preflightCeiling = config?.preflight?.maxConsecutiveFailures ?? 2
 
   const haltIf = (condition, why) => (condition ? { action: 'halt', why } : null)
 
@@ -140,6 +142,14 @@ export const decide = (state, { payload = {}, signals = null, treeGreen = true, 
       !state.planPath && (state.planlessIterations ?? 0) >= planlessCeiling,
       `no plan bound after ${planlessCeiling} turns — the loop cannot drive work it cannot measure. ` +
         'Bind one with `run-state.mjs plan <path>`, or this is not work the loop can drive.'
+    ),
+    // An entry condition that stopped holding mid-run. Counted rather than immediate: one flaky
+    // response is not evidence a dependency is down, and killing a four-hour run over a dropped
+    // connection is its own failure. The count is in the run record because this file is the only
+    // place that can see history — preflight itself answers only "is it healthy right now".
+    haltIf(
+      preflight && !preflight.ok && (preflight.failures ?? 1) >= preflightCeiling,
+      `precondition failed ${preflightCeiling} times in a row — ${preflight?.reason ?? 'reason not recorded'}`
     ),
     haltIf(signals?.goalDone === true, 'done')
   ].find(Boolean)
@@ -314,8 +324,19 @@ const main = async () => {
     ? run(process.env.SHELL || '/bin/sh', ['-c', config.commands.verifyFast], { timeout: config.verifyTimeoutMs }).ok
     : true
 
+  // Entry conditions that can stop holding mid-run — a dependency that went away, a toolchain check
+  // that started failing. Costs nothing unless the project configured something to watch, because the
+  // default lists are empty and `hasIterationChecks` is then false.
+  //
+  // `cleanTree` is deliberately NOT re-checked here: by iteration two the loop has been editing on
+  // purpose, so a dirty tree is the expected state rather than a fault.
+  const checked = hasIterationChecks(config) ? await preflight({ config, scope: 'iteration' }) : null
+  const failures = checked ? (checked.ok ? 0 : (state.preflightFailures ?? 0) + 1) : (state.preflightFailures ?? 0)
+
+  if (checked) update(state.runId, { preflightFailures: failures }, config)
+
   const signals = state.planPath ? cachedSignals(config, state) : null
-  const verdict = decide(state, { payload, signals, treeGreen, config })
+  const verdict = decide(state, { payload, signals, treeGreen, config, preflight: checked && { ...checked, failures } })
 
   if (verdict.action === 'halt') {
     const report = haltReport(state, verdict.why, {

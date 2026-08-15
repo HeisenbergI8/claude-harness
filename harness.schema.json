@@ -112,6 +112,37 @@
       "items": { "type": "string" },
       "description": "Agents exempt from the repair loop because they cannot write source."
     },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Entry conditions, checked before a task-loop run spends an iteration.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "cleanTree": {
+          "type": "boolean",
+          "description": "Refuse to start on a dirty tree, so this run's diff can be told apart from what was already there. Entry only, never re-checked mid-run. Untracked files are ignored deliberately."
+        },
+        "treeGreen": {
+          "type": "boolean",
+          "description": "Refuse to start on a red tree, by running commands.verifyFast. Refuse, do not repair — a run that begins by fixing what it did not cause cannot say which part of its diff is its own work."
+        },
+        "reachable": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "URLs the work depends on. `${env:NAME}` resolves from the environment, and a target resolving to nothing is reported as UNSET rather than unreachable. Any HTTP response counts as reachable."
+        },
+        "commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Commands that must exit 0 before the loop starts, and between iterations."
+        },
+        "maxConsecutiveFailures": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Consecutive failures of the between-iteration checks before the run halts. One flaky response is not evidence a dependency is down."
+        }
+      }
+    },
     "state": {
       "type": "object",
       "additionalProperties": false,

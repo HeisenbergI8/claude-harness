@@ -46,6 +46,17 @@
     "heartbeat": { "enabled": true }
   },
 
+  "//preflight": "Entry conditions, checked BEFORE an iteration is spent. A precondition that lives as a line in a report is not a precondition: a human reading 'backend: no' stops, a loop reads it and spends its whole budget verifying loading skeletons. cleanTree and treeGreen are free and on by default; the two lists cost nothing while they are empty.",
+  "preflight": {
+    "cleanTree": true,
+    "treeGreen": true,
+    "//reachable": "Any HTTP response counts as up — a root that 404s is still listening. A ${env:NAME} that resolves to nothing is reported as UNSET, not unreachable: those need different fixes.",
+    "reachable": ["${env:API_BASE_URL}"],
+    "commands": ["npm run check:toolchain"],
+    "//maxConsecutiveFailures": "Between-iteration failures before the run halts. One flaky response is not evidence a dependency is down; killing a four-hour run over a dropped connection is its own failure.",
+    "maxConsecutiveFailures": 2
+  },
+
   "//readOnlyAgents": "Agents with no write access to source. They are exempt from the repair loop, because blocking them demands a fix they cannot make — and every block replays their whole context. Names match the `name:` in the agent's frontmatter.",
   "readOnlyAgents": ["tester", "auditor", "change-auditor", "Explore"],
 

@@ -36,6 +36,21 @@ nobody asked for.
 
 ## Your job when a run starts
 
+### 0. Check the entry conditions before spending anything
+
+```bash
+node .claude/harness/preflight.mjs
+```
+
+If it fails, **stop and tell the user what failed. Do not fix it.** A run that begins by repairing
+something it did not cause can no longer say which part of its own diff is its work — and *what did this
+run change* is the first question asked when it halts. It also means the loop's first act is unplanned,
+unrequested work.
+
+A precondition that lives as a line in a report is not a precondition. A human reading "backend: no"
+stops; a loop reads it, carries on, and spends its entire budget verifying loading skeletons — every
+screen renders, every check passes, and none of it means anything.
+
 ### 1. Size the task honestly, out loud
 
 **The loop can only drive planned work.** The cursor advances through `#### Step N.M` headings, so work
