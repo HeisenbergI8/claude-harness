@@ -19,7 +19,11 @@ export const makeRepo = ({ config, packageJson } = {}) => {
   if (packageJson) writeFileSync(join(root, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`)
 
   // Install the real harness the real way, so the tests exercise the installer as well as the gates.
-  execFileSync('node', [join(REPO, 'bin/harness-init.mjs'), root], { stdio: 'pipe' })
+  //
+  // --no-probe because the installer otherwise EXECUTES the commands it detected. That is the right
+  // behaviour for a person and the wrong one for a fixture: it would run each temp repo's declared
+  // verify command on every makeRepo call. The probe has its own tests, which drive it directly.
+  execFileSync('node', [join(REPO, 'bin/harness-init.mjs'), root, '--no-probe'], { stdio: 'pipe' })
 
   if (config !== undefined) {
     if (config === null) rmSync(join(root, 'harness.config.json'), { force: true })

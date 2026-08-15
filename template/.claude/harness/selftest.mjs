@@ -15,7 +15,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { classifyCommand, load } from './config.mjs'
+import { classifyCommand, load, probeCommand } from './config.mjs'
 import { INSTRUMENTED, foldBeats, readRegisteredHooks, silentHooks } from './hook-heartbeat.mjs'
 
 const SCRIPTS = [
@@ -116,6 +116,33 @@ if (
     'commands.verify and commands.verifyFast are different commands that classify identically, so the ' +
       'ledger cannot distinguish a mid-task check from the closing gate.'
   )
+}
+
+// Declaring a command and being able to RUN it are different states, and the gap between them looks
+// exactly like a healthy install. This is opt-in rather than automatic for one reason: the docs
+// recommend wiring this selftest into `verify`, so probing on every run would make the closing gate
+// execute the test suite a second time. `probeCommand` refuses to re-enter the selftest, but it cannot
+// stop `verify` from being slow, so the cost stays behind a flag.
+if (process.argv.includes('--probe')) {
+  for (const [name, command] of Object.entries(config.commands)) {
+    if (!command) continue
+
+    const result = probeCommand(command, { cwd: root })
+
+    if (result.verdict === 'missing') {
+      problems.push(
+        `commands.${name} ("${command}") CANNOT RUN: ${result.detail}. The gate that depends on it ` +
+          `cannot pass, so it will block every turn on a failure that has nothing to do with your code. ` +
+          `Fix the command in harness.config.json, or install what it calls.`
+      )
+    } else if (result.verdict === 'skipped') {
+      notes.push(`probe ${name}: skipped, it runs this selftest`)
+    } else {
+      notes.push(`probe ${name}: runs${result.verdict === 'fail' ? ` (exit ${result.status} — red tree, not a setup problem)` : ''}`)
+    }
+  }
+} else if (config.commands.verify || config.commands.verifyFast) {
+  notes.push('commands not executed — re-run with --probe to check they can actually run')
 }
 
 // ── 4. Hook registration ───────────────────────────────────────────────────────

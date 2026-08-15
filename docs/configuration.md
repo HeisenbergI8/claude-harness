@@ -130,6 +130,7 @@ Each gate can be tuned or switched off.
     "verifyGate": { "enabled": true, "maxSameFailure": 3 },
     "claimCheck": { "enabled": true, "maxBlocks": 2, "extraClaimPatterns": [] },
     "loopBreaker": { "enabled": true, "injectAt": 2, "blockAt": 3 },
+    "reviewGate": { "enabled": true },
     "heartbeat": { "enabled": true }
   }
 }

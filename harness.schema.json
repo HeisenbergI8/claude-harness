@@ -99,6 +99,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": { "enabled": { "type": "boolean" } }
+        },
+        "reviewGate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean" } }
         }
       }
     },

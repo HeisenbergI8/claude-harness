@@ -12,6 +12,80 @@ npx github:HeisenbergI8/claude-harness init
 
 ---
 
+## Quickstart
+
+**Before you start you need** Node 18 or newer, and [Claude Code](https://claude.com/claude-code)
+already working in the project you want to protect. This installs *into* a project — it is not a
+standalone tool.
+
+### 1. Install, from your project's root directory
+
+```bash
+cd /path/to/your/project
+npx github:HeisenbergI8/claude-harness init
+```
+
+It detects your project type, writes `harness.config.json`, installs the hooks, and then **runs your
+two verify commands to check they can actually run.** Expect something like:
+
+```
+Detected project type: node
+  verify:      npm run test
+  verify:fast: npm run typecheck
+
+Checking those commands actually run:
+  verify:      runs, exit 0
+  verify:fast: runs, exit 0
+```
+
+**If either one says `CANNOT RUN`, stop and fix it in `harness.config.json` before going on.** Those
+two commands *are* the gate — everything else is machinery for deciding when to run them. A command
+that cannot run looks exactly like a healthy install right up until it blocks every turn.
+
+A non-zero exit is fine here. It means the command ran and your tree is currently red, which is the
+normal thing this harness exists to tell you about.
+
+### 2. Restart Claude Code
+
+Hooks are read once, at session startup. **Until you restart, nothing you just installed is running.**
+This is the step people skip and then conclude the harness does not work.
+
+### 3. Run one ordinary turn, then check it is actually alive
+
+Ask Claude for any small change. Then:
+
+```bash
+node .claude/harness/selftest.mjs --probe
+```
+
+Ending in `- harness selftest: ok` means the gates are real. Warnings are expected on a fresh install.
+A line starting `FAIL` is not — it names what is broken and what to do about it.
+
+### 4. Fill in `CONVENTIONS.md`, and delete every section you do not fill
+
+Optional on day one, but it is what separates a plan grounded in your code from plausible-sounding
+advice. **A half-filled scaffold is worse than no file**, because the agents will follow whatever it
+says. The selftest warns until you delete the marker line at the top.
+
+### What it looks like when it is working
+
+Nothing changes until a claim outruns the evidence. When one does, the turn stops:
+
+```
+Your message claims verification passed, but NO verification command ran this turn.
+
+Matched: all tests pass
+
+Either run it, or remove the claim. Reporting a green gate you did not run is the single
+most damaging thing you can do here — it is worse than reporting a failure, because a
+failure gets fixed and a false green gets shipped.
+```
+
+Claude reads that, runs the command, and either reports the real result or corrects the claim. You did
+not have to be watching.
+
+---
+
 ## The problem this solves
 
 An agent that writes code will eventually tell you it verified the code. Sometimes it did. Sometimes it
@@ -81,6 +155,11 @@ node claude-harness/bin/harness-init.mjs /path/to/your/repo
 It detects your project type (Node, Python, Go, Rust, Make), writes a starter `harness.config.json`,
 copies the scripts to `.claude/harness/`, installs the agents and skills, scaffolds `CONVENTIONS.md`,
 and **merges** hooks into `.claude/settings.json` without touching anything already there.
+
+It then **executes the two commands it detected**, because detection is a guess and a guess that was
+never run is checked only by a reader who already knows the answer. A command that cannot run is
+reported as `CANNOT RUN` with what the shell said. A command that runs and *fails* is reported as
+fine — that is a red tree, not a broken setup. Pass `--no-probe` to skip this.
 
 Running it twice changes nothing. **Agents, skills and `CONVENTIONS.md` are never overwritten** — not
 even with `--force`. Prompts get tuned in place, and silently replacing a tuned agent with the stock one
@@ -240,6 +319,48 @@ exhausts one.
 
 Halts are therefore evaluated unconditionally, and only if none fire does the driver ask whether the
 tree is red.
+
+## Troubleshooting
+
+**Nothing happens — no gate ever fires.**
+Almost always the restart. Hooks are read at session startup, so a session that was open during
+install is running without them. Restart, take one turn, then run
+`node .claude/harness/selftest.mjs`. If it reports hooks *registered* but says none have fired, the
+restart did not take. If it reports `registers no hooks`, the merge into `.claude/settings.json` did
+not happen — re-run the installer.
+
+**Every turn is blocked by a command failure that has nothing to do with my code.**
+Your `verifyFast` cannot run. Check it:
+
+```bash
+node .claude/harness/selftest.mjs --probe
+```
+
+A `CANNOT RUN` line names the command and what the shell said. Fix it in `harness.config.json` — set
+it to whatever you genuinely run by hand — or install the tool it calls.
+
+**It blocks too often.**
+First check the block is wrong rather than inconvenient; that judgement is the whole point of the
+tool. If a specific gate is genuinely not for you, switch it off in `harness.config.json` rather than
+disabling everything:
+
+```json
+{
+  "gates": {
+    "reviewGate": { "enabled": false }
+  }
+}
+```
+
+`verifyGate`, `claimCheck`, `loopBreaker` and `heartbeat` take the same switch. See
+[`docs/configuration.md`](docs/configuration.md) for thresholds you can loosen instead of disabling.
+
+**I want it gone.**
+Delete `.claude/harness/`, `harness.config.json`, and the harness entries under `hooks` in
+`.claude/settings.json` — they are the ones whose commands mention `.claude/harness/`. Anything else in
+that file was yours; the installer never touched it. The agents and skills in `.claude/agents/` and
+`.claude/skills/` are ordinary Claude Code files and work with or without the harness, so keep them if
+you like them.
 
 ## Honest limits
 

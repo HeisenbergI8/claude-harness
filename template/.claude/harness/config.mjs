@@ -21,6 +21,7 @@
 // object with `errors` populated instead of throwing, and each gate decides what to do about it. The
 // selftest is where a broken config becomes loud; a hook is not.
 
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { relative, resolve, sep } from 'node:path'
 
@@ -416,6 +417,85 @@ export const classifyCommand = (config, command) => {
   }
 
   return null
+}
+
+// ── Command runnability ────────────────────────────────────────────────────────
+//
+// The most expensive way this harness can be installed is with a declared command that CANNOT RUN.
+// It is invisible at setup time: the config looks right, the selftest prints the command approvingly,
+// every hook is registered correctly. Then `verifyFast` runs at the end of the FIRST turn, exits
+// non-zero because the binary was never installed, and the gate blocks — on a failure that has nothing
+// to do with the code that was just written, and will recur on every turn forever.
+//
+// Someone who cannot trace that back to a setup guess concludes the harness is broken and deletes it.
+// So the guess gets checked at the moment it is made, rather than at the end of the first turn.
+//
+// ── RUNNABLE IS NOT PASSING ────────────────────────────────────────────────────
+//
+// A red tree is the healthy case this entire harness exists to surface, so a non-zero exit is NOT a
+// finding here. The only thing being detected is "the shell could not find the thing to run". Those
+// two are indistinguishable in an exit code and obvious in stderr, which is why this reads output
+// rather than status alone.
+export const NOT_RUNNABLE = [
+  /command not found/i,
+  /:\s*not found/i, // dash and ash phrase it differently from bash
+  /is not recognized as an internal or external command/i, // cmd.exe
+  /\bmissing script\b/i, // npm run <script that is not in package.json>
+  /no such file or directory/i,
+  /can'?t open file/i, // python path/that/does/not/exist.py
+  /no rule to make target/i,
+  /unknown command/i // cargo/go/deno subcommand that does not exist
+]
+
+// Pure, so the decision is testable without spawning anything.
+//
+// A TIMEOUT COUNTS AS RUNNABLE, which is the move that makes this safe rather than a compromise that
+// weakens it. Every failure above is decided in milliseconds — the shell either resolves the binary or
+// it does not. A command still executing when the deadline passes has therefore already proved its
+// binary exists, so a slow test suite can be probed with a short timeout and no false alarm.
+export const classifyProbe = ({ status = null, stderr = '', stdout = '', timedOut = false } = {}) => {
+  if (timedOut) return { runnable: true, verdict: 'slow' }
+
+  // stdout as well as stderr: npm reports a missing script on stdout in some versions.
+  const output = `${stderr}\n${stdout}`
+  const matched = NOT_RUNNABLE.find(pattern => pattern.test(output))
+
+  if (matched || status === 127) {
+    const line = output
+      .split('\n')
+      .map(text => text.trim())
+      .find(text => matched?.test(text))
+
+    return { runnable: false, verdict: 'missing', detail: line ?? `exited ${status} without running` }
+  }
+
+  return { runnable: true, verdict: status === 0 ? 'pass' : 'fail', status }
+}
+
+// `timeout` is deliberately short. See above: this is only ever distinguishing "found the binary" from
+// "did not", and that question is always answered immediately.
+export const probeCommand = (command, { cwd = process.cwd(), timeout = 15000 } = {}) => {
+  if (typeof command !== 'string' || !command.trim()) return { runnable: true, verdict: 'unset' }
+
+  // A command that runs the selftest would re-enter this probe from inside itself, forever. The docs
+  // actively recommend wiring the selftest into `verify`, so this is an ordinary configuration rather
+  // than a corner case, and it has to be refused by name.
+  if (/selftest\.mjs/.test(command)) return { runnable: true, verdict: 'skipped' }
+
+  let result
+
+  try {
+    result = spawnSync(command, { shell: true, cwd, timeout, encoding: 'utf8' })
+  } catch (error) {
+    return { runnable: false, verdict: 'missing', detail: error.message }
+  }
+
+  return classifyProbe({
+    status: result.status,
+    stderr: result.stderr ?? '',
+    stdout: result.stdout ?? '',
+    timedOut: result.error?.code === 'ETIMEDOUT' || Boolean(result.signal)
+  })
 }
 
 // ── Source matching ────────────────────────────────────────────────────────────

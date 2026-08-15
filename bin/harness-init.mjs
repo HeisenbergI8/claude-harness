@@ -5,6 +5,7 @@
 //   node bin/harness-init.mjs --dry-run        print every change without making one
 //   node bin/harness-init.mjs --upgrade        refresh the scripts only; never touch config or settings
 //   node bin/harness-init.mjs --force          also overwrite an existing harness.config.json
+//   node bin/harness-init.mjs --no-probe       skip running the detected commands to check they work
 //
 // ── TWO RULES THIS FILE OBEYS ──────────────────────────────────────────────────
 //
@@ -14,11 +15,14 @@
 //
 // 2. DETECTION PROPOSES, THE USER DISPOSES. A guessed verify command that does not exist is worse than
 //    no command at all, because the gate then fails for a reason that has nothing to do with the code.
-//    Everything detected is printed, with the file to edit if it is wrong.
+//    Everything detected is printed, with the file to edit if it is wrong — and then each command is
+//    actually RUN, because a printed command is only checked by a reader who already knows the answer.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { probeCommand } from '../template/.claude/harness/config.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = resolve(HERE, '../template')
@@ -30,6 +34,7 @@ const target = resolve(args.find(arg => !arg.startsWith('--')) ?? process.cwd())
 const dryRun = flags.has('--dry-run')
 const upgrade = flags.has('--upgrade')
 const force = flags.has('--force')
+const probe = !flags.has('--no-probe') && !dryRun
 
 const changes = []
 const log = message => console.log(message)
@@ -369,6 +374,51 @@ const main = () => {
   log(`  verify:fast: ${detected.commands.verifyFast ?? '(none — you must fill this in)'}`)
 
   if (detected.note) log(`\n  ! ${detected.note}`)
+
+  // Rule 2, enforced rather than stated. A command that was only ever printed is checked by a reader
+  // who already knows what it should say — which is nobody installing this for the first time.
+  const broken = []
+
+  if (probe && (detected.commands.verify || detected.commands.verifyFast)) {
+    log('\nChecking those commands actually run:')
+
+    for (const [name, command] of [['verify', detected.commands.verify], ['verify:fast', detected.commands.verifyFast]]) {
+      if (!command) continue
+
+      const result = probeCommand(command, { cwd: target })
+      const label = `  ${`${name}:`.padEnd(13)}`
+
+      if (result.verdict === 'missing') {
+        log(`${label}CANNOT RUN — ${result.detail}`)
+        broken.push(name)
+      } else if (result.verdict === 'fail') {
+        // Worth saying out loud: a red tree at install time is not a setup problem, and someone who
+        // has just been told to check their commands will otherwise read a non-zero exit as one.
+        log(`${label}runs (exited ${result.status} — your tree is red, which is not a setup problem)`)
+      } else if (result.verdict === 'slow') {
+        log(`${label}runs (still going after 15s, so the command exists)`)
+      } else if (result.verdict === 'skipped') {
+        log(`${label}skipped — it runs the selftest, which would call this check from inside itself`)
+      } else {
+        log(`${label}runs, exit 0`)
+      }
+    }
+
+    if (broken.length) {
+      const everyTurn = broken.includes('verify:fast')
+
+      log(
+        `\n  ! ${broken.join(' and ')} cannot run. This is the one setup mistake that looks like a working\n` +
+          `    install: the config is valid, the hooks are registered, and the gate fails anyway.\n\n` +
+          (everyTurn
+            ? `    verify:fast runs at the END OF EVERY TURN, so until this is fixed every turn will be\n` +
+              `    blocked by an error that has nothing to do with the code just written.\n\n`
+            : `    verify is the closing gate, so it will block instead of confirming a healthy tree.\n\n`) +
+          `    FIX: open harness.config.json and set the command to what you actually run by hand,\n` +
+          `    or install the missing tool. Then run this installer again to re-check.`
+      )
+    }
+  }
 
   log('\nNext:')
   log('  1. Open harness.config.json and check the two commands are the ones you actually run.')
