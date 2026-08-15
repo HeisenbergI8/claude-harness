@@ -92,6 +92,45 @@ Per gate, in `harness.config.json`:
 Entirely: remove the entries from `.claude/settings.json`, or delete `.claude/harness/`. Claude Code's
 own `disableAllHooks` also turns everything off — this is a guardrail, not a sandbox.
 
+## Settings posture — what belongs in `settings.json` rather than in a guard
+
+The harness installs hooks and nothing else. These four keys are Claude Code's own, not the harness's,
+and `harness-init` never writes them — but they sit alongside the gates and each one covers something a
+script cannot. Add them by hand if you want them.
+
+```jsonc
+{
+  "permissions": { "disableBypassPermissionsMode": "disable" },
+
+  "autoMode": {
+    "hard_deny": [
+      "$defaults",
+      "Deleting, moving, or overwriting any file outside the current repository — including anything under the home directory, Desktop, or another project. There is no task for which this is correct; ask the user to do it themselves.",
+      "git clean, git reset --hard, git checkout -- ., or git restore . — these destroy uncommitted work and untracked files with no way back.",
+      "Recursive deletion of a directory the user did not explicitly name in this conversation."
+    ]
+  },
+
+  "includeCoAuthoredBy": false,
+  "attribution": { "commit": "", "pr": "", "sessionUrl": false }
+}
+```
+
+**`autoMode.hard_deny` is belt-and-braces with `guard-destructive.mjs`, not a replacement for it.** The
+two fail in opposite directions, which is the entire reason to run both:
+
+- The guard is deterministic. It matches command *shape*, so it catches `git reset --hard` however it is
+  phrased — and it cannot catch a destructive action expressed in a form nobody anticipated.
+- `hard_deny` is read by a classifier. It generalises to shapes no regex was written for — and it can be
+  talked around, so it is not something to rely on alone.
+
+Keep `$defaults` in the list. Replacing it rather than extending it silently drops every deny Claude Code
+ships with.
+
+**`includeCoAuthoredBy: false`** stops the `Co-Authored-By: Claude` trailer being appended to commits.
+Worth knowing that it is a repo-level choice with a repo-level consequence: those trailers put the
+assistant in a repository's contributor list.
+
 ## Adding your own gate
 
 The plumbing is exported from `config.mjs`:

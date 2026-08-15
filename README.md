@@ -295,6 +295,16 @@ is answered by evidence instead of by hope.
   object silently loses records, and a lost record turns an honest statement into a blocked turn.
 - **Decisions are pure functions.** `decide()` is exported from every gate and tested in both directions,
   because a gate whose ALLOW cases are untested is a gate nobody keeps switched on.
+- **Selection is a flag, never a bare word from argv.** A tool that picks its target with
+  `argv.find(arg => TARGETS[arg])` narrows itself silently the moment any argument happens to equal a
+  target name — a shell where `#` is not a comment forwards the words of your own comment as arguments,
+  and a report covering one of three agents looks exactly like a report covering all three. `--agent
+  tester`, and an unrecognised name is *refused* rather than ignored. This is the same defect as a guard
+  that matches unquoted text: an input that can be satisfied by prose fires on the sentence describing it.
+- **Prove a check by injection.** A check is not verified by its tests passing. Break the rule and confirm
+  the test goes red. Where two checks look redundant, disable each in turn: if neither disabling changes
+  the result they are genuine belt-and-braces and both should say so in a comment; if disabling one never
+  changes anything, it is dead.
 - **The ALLOW half is the important half.** A green tree, a first failure, three *different* failures in
   a row, and every honest sentence — "I have not run the tests yet", "the suite failed, here is the
   output" — must pass untouched. Those are pinned verbatim in `test/claim-check.test.mjs`.

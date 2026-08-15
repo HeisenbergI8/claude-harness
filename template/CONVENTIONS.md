@@ -62,6 +62,29 @@ local database. Used by ~20 operations staff._
 
 ---
 
+## Reporting rules
+
+<!-- These three hold in every project. They are here rather than in the agent prompts because they are
+     about YOUR backlog, and an agent cannot infer any of them from the code. Delete one only if you
+     genuinely disagree with it. -->
+
+- **A deferral is not a gap.** Work that was consciously postponed must not be reported as a defect, a
+  finding, or a hand-off item — by a person or by an agent. From inside any single module a deliberate
+  absence looks exactly like an oversight, so it will be re-raised on every audit until it is written
+  down. List the deferrals here: <!-- e.g. role checks are deferred platform-wide; their absence is
+  intentional -->
+- **A claim that ages carries the date it was measured.** Any count, or any "every / all / none"
+  statement, written into something durable — a doc, a status field, a user-visible string — says when it
+  was measured: `measured NULL on 25 of 25 rows on 2026-08-06`. Not to prove the measurement happened,
+  but because writing a date for a measurement you did not take is a deliberate act rather than an
+  accident of momentum. It also makes the claim checkable later; `NULL on all rows` reads as eternally
+  true.
+- **A priority label is not permission to start.** "Critical" or "P1" in a spec or a ticket says what
+  matters, not what is next, and not what has already been decided against. Check whatever records
+  decisions in this project before planning from a label.
+
+---
+
 <!-- ────────────────────────────────────────────────────────────────────────────────────────────────
      OPTIONAL — add a heading below only when you have something real to put under it. Each one earns
      its place on a bigger or older codebase and is noise on a small one.

@@ -245,6 +245,40 @@ It also records payload **key names** — never values, which would put assistan
 
 ---
 
+## The promotion ladder
+
+Every gate here sits somewhere on the fail-open/fail-closed axis, and the docs say where. What they did
+not say is **how a check moves along it**, which is the decision people actually get wrong — a check
+written confidently and wired to block on day one is a check that fires on a legitimate action in week
+one and is deleted in week two.
+
+A new check earns blocking status. It does not start with it.
+
+| Rung | Wiring | What it means |
+| --- | --- | --- |
+| 1. Reporting | `node .claude/harness/<check>.mjs`, run by hand | It has no opinion about your turn. You look at it when you want to. |
+| 2. Advisory | `(node .claude/harness/<check>.mjs \|\| true)` inside your verify command | It speaks on every run and can never stop one. Its false positives cost attention, not work. |
+| 3. Blocking | A hook, or an unguarded line in `verify` | It can refuse a turn. |
+
+The bar for each promotion is **evidence, not confidence**: the check has been quiet across several
+different areas of the repo for a couple of weeks, and every time it did fire you agreed with it. A check
+that has fired once on correct work is not ready, however good the reasoning behind it was.
+
+This is the mechanical form of the rule the whole harness runs on — *a guard that refuses the correct
+action protects nothing.* Note which way the ladder is walked: **down is free, up is earned.** Demoting a
+noisy blocking check to advisory takes one `|| true` and keeps its signal; deleting it loses the signal
+permanently, and deletion is what happens to a check nobody trusts.
+
+Two things that stay true at every rung:
+
+- **Scope narrowly, and write down what the check deliberately does *not* fire on.** The exclusions are
+  load-bearing, and an undocumented exclusion reads as an oversight to the next person, who removes it.
+- **Unparseable is not clean.** A check that cannot read its input reports that it could not, and never
+  counts the input as passing. A checker whose silence means "fine" goes green for the life of the repo
+  while reading a field the writer never emitted.
+
+---
+
 ## Testing philosophy
 
 **The ALLOW half is the important half.** A gate that blocks honest work gets switched off, and a
