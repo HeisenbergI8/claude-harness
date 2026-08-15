@@ -321,7 +321,7 @@ const main = () => {
     record('keep', 'harness.config.json  (exists — pass --force to overwrite)')
   } else {
     const config = {
-      $schema: 'https://raw.githubusercontent.com/johnrossrivera/claude-harness/main/harness.schema.json',
+      $schema: 'https://raw.githubusercontent.com/HeisenbergI8/claude-harness/main/harness.schema.json',
       commands: detected.commands,
       source: detected.source
     }

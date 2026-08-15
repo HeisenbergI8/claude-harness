@@ -7,7 +7,7 @@ than on retries.
 No dependencies. Any language. Drop it into a repo, declare two commands, restart the session.
 
 ```bash
-npx github:johnrossrivera/claude-harness init
+npx github:HeisenbergI8/claude-harness init
 ```
 
 ---
@@ -68,13 +68,13 @@ Everything is plain Node with **zero dependencies**, reading one config file.
 ## Install
 
 ```bash
-npx github:johnrossrivera/claude-harness init
+npx github:HeisenbergI8/claude-harness init
 ```
 
 Or clone and run it against a target repo:
 
 ```bash
-git clone https://github.com/johnrossrivera/claude-harness
+git clone https://github.com/HeisenbergI8/claude-harness
 node claude-harness/bin/harness-init.mjs /path/to/your/repo
 ```
 

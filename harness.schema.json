@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/johnrossrivera/claude-harness/harness.schema.json",
+  "$id": "https://github.com/HeisenbergI8/claude-harness/harness.schema.json",
   "title": "claude-harness configuration",
   "description": "Declares what verification means for this project. Belongs at the repository root, in version control.",
   "type": "object",
