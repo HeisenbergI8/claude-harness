@@ -4,7 +4,7 @@
 
 import { strict as assert } from 'node:assert'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { after, test } from 'node:test'
 import { join } from 'node:path'
 
@@ -327,4 +327,35 @@ test('the bin file is committed executable, or npx cannot launch it', () => {
   })
 
   assert.match(entry, /^100755 /, `bin/harness-init.mjs is committed as ${entry.split(' ')[0]}, not 100755`)
+})
+
+// THE SILENT ONE. npm links a bin as `node_modules/.bin/<name>`, so under npx `process.argv[1]` is
+// that symlink rather than this file. An entrypoint guard that compares FILENAMES is false there:
+// main() never runs, nothing is written, and the process exits 0 having printed nothing — which is
+// indistinguishable from a successful install right up until you look for the .claude directory.
+//
+// Driven through a symlink because that is the only way the bug is visible; running the file directly
+// passes either way, which is exactly why it survived.
+test('the installer runs when invoked through a symlinked bin, as npx does', () => {
+  const repo = fresh()
+  const link = join(repo.root, 'claude-harness')
+
+  symlinkSync(join(REPO, 'bin/harness-init.mjs'), link)
+
+  const out = execFileSync(link, ['--dry-run', 'init'], { cwd: repo.root, encoding: 'utf8', stdio: 'pipe' })
+
+  assert.match(out, /claude-harness ->/, 'invoked through a bin symlink, the installer printed nothing')
+  // `update` rather than `create`, because the fixture has the harness installed already. Either verb
+  // proves the same thing: main() ran and walked the template.
+  assert.match(out, /(create|update)\s+\.claude\/harness\//)
+})
+
+// The other half of the same guard: being imported must NOT install anything. This file imports the
+// module at the top, so a guard that fired on import would have run an install into the repo on every
+// test run.
+test('importing the module does not run an install', async () => {
+  const module = await import('../bin/harness-init.mjs')
+
+  assert.ok(typeof module.mergeSettings === 'function')
+  assert.ok(!existsSync(join(REPO, 'init')), 'importing the installer created a stray directory')
 })

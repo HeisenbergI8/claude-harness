@@ -21,7 +21,7 @@
 //    Everything detected is printed, with the file to edit if it is wrong — and then each command is
 //    actually RUN, because a printed command is only checked by a reader who already knows the answer.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
@@ -573,7 +573,28 @@ const main = async () => {
   log('     "correct" mean here, so they belong in a diff.')
 }
 
-if (process.argv[1]?.endsWith('harness-init.mjs')) {
+// ── AM I THE PROGRAM, OR A MODULE SOMEONE IMPORTED? ────────────────────────────
+//
+// This used to ask whether `process.argv[1]` ENDED WITH this file's name, which is false on the one
+// install path everyone actually uses. npm links a bin as `node_modules/.bin/claude-harness`, so under
+// `npx` argv[1] is that SYMLINK — the name does not match, `main()` never runs, and the process exits 0
+// having printed nothing at all. A silent success is the worst possible failure for an installer:
+// every signal the user has says it worked.
+//
+// Resolving both sides to their real paths is what makes `node bin/harness-init.mjs`, a linked bin, and
+// an `import` from the test suite all agree. It fails CLOSED — anything unreadable means "not the
+// entrypoint", so a bad argv can never cause an unasked-for install.
+const isEntrypoint = () => {
+  if (!process.argv[1]) return false
+
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+if (isEntrypoint()) {
   main().catch(error => {
     console.error(`\nharness-init failed: ${error.message}`)
     process.exit(1)
