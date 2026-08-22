@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Installs the harness into a target repository.
 //
+//   npx github:HeisenbergI8/claude-harness init  install into the current directory
 //   node bin/harness-init.mjs [target]         install (or top up) into `target`, default cwd
+//                                              a bare leading `init` is a subcommand, not a target
 //   node bin/harness-init.mjs --dry-run        print every change without making one
 //   node bin/harness-init.mjs --upgrade        refresh the scripts only; never touch config or settings
 //   node bin/harness-init.mjs --force          also overwrite an existing harness.config.json
@@ -31,7 +33,19 @@ const TEMPLATE = resolve(HERE, '../template')
 
 const args = process.argv.slice(2)
 const flags = new Set(args.filter(arg => arg.startsWith('--')))
-const target = resolve(args.find(arg => !arg.startsWith('--')) ?? process.cwd())
+
+// ── `init` IS A SUBCOMMAND, NOT A DIRECTORY ────────────────────────────────────
+//
+// The documented install is `npx github:HeisenbergI8/claude-harness init`, so `init` arrives here as a
+// positional argument — and the only positional this script takes is the TARGET DIRECTORY. Without
+// this it installed into a new subdirectory called `init`, and did so silently: every path it printed
+// was plausible, and the repo the user was standing in got nothing.
+//
+// Only a BARE leading `init` is swallowed. An explicit path — `./init`, `/srv/init` — is still a
+// target, which leaves the escape hatch open for a directory that really is called that.
+const positionals = args.filter(arg => !arg.startsWith('--'))
+const paths = positionals[0] === 'init' ? positionals.slice(1) : positionals
+const target = resolve(paths[0] ?? process.cwd())
 
 const dryRun = flags.has('--dry-run')
 const upgrade = flags.has('--upgrade')

@@ -259,3 +259,72 @@ test('the shipped template settings are valid JSON and register every gate', () 
     )
   }
 })
+
+// ── The npx entry path ─────────────────────────────────────────────────────────
+//
+// `npx github:HeisenbergI8/claude-harness init` is the documented install, and both halves of it were
+// broken in ways that produced NO OUTPUT AT ALL: the bin file was not executable, so npx could not
+// launch it, and `init` was parsed as the target directory, so a working invocation installed into a
+// new subdirectory called `init` while the repo the user was standing in got nothing.
+//
+// Both failures are silent, which is why they are pinned here rather than left to a manual check.
+
+// The first line is `claude-harness -> <target>  (dry run — ...)`, which is the only place the
+// resolved target is observable from outside.
+const resolvedTarget = (cwd, ...args) => {
+  const out = execFileSync('node', [join(REPO, 'bin/harness-init.mjs'), '--dry-run', ...args], {
+    cwd,
+    encoding: 'utf8',
+    stdio: 'pipe'
+  })
+
+  return /claude-harness -> (.+?)\s{2}/.exec(out)?.[1] ?? null
+}
+
+test('a bare `init` is a subcommand, and installs into the current directory', () => {
+  const repo = fresh()
+
+  assert.equal(resolvedTarget(repo.root, 'init'), repo.root)
+  assert.notEqual(resolvedTarget(repo.root, 'init'), join(repo.root, 'init'))
+})
+
+test('with no arguments at all the target is still the current directory', () => {
+  const repo = fresh()
+
+  assert.equal(resolvedTarget(repo.root), repo.root)
+})
+
+test('an explicit path is still the target, not swallowed as a subcommand', () => {
+  const repo = fresh()
+  const other = fresh()
+
+  assert.equal(resolvedTarget(repo.root, other.root), other.root)
+})
+
+// The escape hatch: only a BARE `init` is the subcommand. Someone whose target really is called `init`
+// can still say so with a path.
+test('an explicit path that happens to be named init is a target', () => {
+  const repo = fresh()
+
+  assert.equal(resolvedTarget(repo.root, './init'), join(repo.root, 'init'))
+})
+
+test('a target given after `init` wins over the current directory', () => {
+  const repo = fresh()
+  const other = fresh()
+
+  assert.equal(resolvedTarget(repo.root, 'init', other.root), other.root)
+})
+
+// THE COMMITTED MODE IS WHAT SHIPS. npx installs from a clone, so the mode in the index is the mode the
+// user gets — and without the executable bit npx exits silently with no output and no error, which is
+// the least diagnosable failure this project can have.
+test('the bin file is committed executable, or npx cannot launch it', () => {
+  const entry = execFileSync('git', ['ls-files', '--stage', 'bin/harness-init.mjs'], {
+    cwd: REPO,
+    encoding: 'utf8',
+    stdio: 'pipe'
+  })
+
+  assert.match(entry, /^100755 /, `bin/harness-init.mjs is committed as ${entry.split(' ')[0]}, not 100755`)
+})
