@@ -537,7 +537,7 @@ Full symptom list, per-gate switches and how to remove the harness entirely:
 ## Development
 
 ```bash
-npm test                    # 324 assertions, both directions
+npm test                    # the full suite, both directions
 node bin/harness-init.mjs --dry-run /path/to/repo
 ```
 
