@@ -158,6 +158,7 @@ and instruction is not behaviour.
 | `verify-plan --strict` | A plan whose checks cannot fail halts the run before phase one | `verify-plan.mjs` |
 | `UserPromptSubmit` inject | Past lessons reach context without being remembered | `lessons.mjs inject` |
 | `lessons.mjs audit` | The cap is enforced, not just documented | wire into your verify command |
+| `Stop` capacity gate | A full store gets reviewed WITH the user, not silently deferred | `lesson-capacity.mjs` |
 
 **Do not move per-agent hooks into agent frontmatter.** Per-subagent `hooks:` blocks have been observed
 schema-valid and silently inert while `settings.json` hooks fired normally in the same session. Scoping

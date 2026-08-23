@@ -427,10 +427,18 @@ Three things make it work:
   deleted because something else now enforces them*. A store shrinking because three entries became one
   guard is the system working.
 
+- **The cap asks its own question.** A store that crosses its review threshold stops the turn and makes
+  the disposition question — consolidate, graduate, promote, retrigger, delete — get put to *you*, with
+  the specific candidates named: entries that say they were already encoded elsewhere, pairs sharing
+  three or more triggers, entries that have never once matched a prompt. Waiting for somebody to
+  remember to run the audit is how a store arrives at full during a session about something else, and
+  gets fixed weeks later by whoever can least reconstruct the answer.
+
 **Nothing automatic ever writes a lesson.** Distillation stays a deliberate act with a four-test bar
 behind it — recurrence, non-obviousness, behaviour change, real cost — because automating it is exactly
 how a curated store becomes a log. If you were expecting an agent that silently rewrites its own memory,
-this is not that, on purpose.
+this is not that, on purpose. The capacity gate holds the same bar in the other direction: it names what
+should probably go, and deletes nothing.
 
 ## Reporting: what this costs, and whether it is working
 

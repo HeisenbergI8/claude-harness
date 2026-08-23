@@ -10,6 +10,11 @@ import { test } from 'node:test'
 import { auditLessons, matches, parseLesson, select } from '../template/.claude/harness/lessons.mjs'
 import { classify } from '../template/.claude/harness/candidates.mjs'
 import { decide } from '../template/.claude/harness/lesson-prompt.mjs'
+import {
+  decide as decideCapacity,
+  dispositionsFor,
+  reviewThreshold
+} from '../template/.claude/harness/lesson-capacity.mjs'
 
 const lesson = (id, trigger, body = '**Lesson:** Do the thing.') =>
   parseLesson(`${id}.md`, `---\nid: ${id}\ntrigger: ${trigger}\nscope: build\nlearned: 2026-01-01\n---\n\n${body}\n`)
@@ -194,4 +199,89 @@ test('only incidents from THIS session count', () => {
   const candidates = [{ kind: 'correction', at: '2026-01-01T00:00:00Z', text: 'old' }]
 
   assert.equal(decide({ candidates, sessionStartedAt: '2026-06-01T00:00:00Z' }).action, 'pass')
+})
+
+// The capacity gate stands down while there is room, so the same test can assert the ALLOW half.
+test('a store below the threshold is never asked about', () => {
+  assert.equal(decideCapacity({ candidates: [] }).action, 'pass')
+  assert.equal(decideCapacity({ lessons: [], max: 4 }).action, 'pass', 'an empty store is not a full one')
+
+  for (const size of [1, 2]) {
+    const lessons = Array.from({ length: size }, (_, i) => lesson(`l${i}`, `t${i}`))
+
+    assert.equal(decideCapacity({ lessons, max: 4 }).action, 'pass', `${size}/4 is below the threshold of 4`)
+  }
+})
+
+test('the threshold is below the cap, because a full store has already lost the argument', () => {
+  assert.equal(reviewThreshold({ max: 40 }), 32)
+  assert.equal(reviewThreshold({ max: 40, reviewAt: 20 }), 20, 'an explicit reviewAt wins')
+  assert.equal(reviewThreshold({ max: 1 }), 1, 'the threshold is never zero')
+})
+
+test('it asks once the store reaches the threshold, and again only if the store grew', () => {
+  const lessons = ['a', 'b', 'c', 'd'].map(id => lesson(id, `${id}term`))
+  const asked = decideCapacity({ lessons, max: 5 })
+
+  assert.equal(asked.action, 'ask')
+  assert.equal(asked.count, 4)
+
+  // Bounded: a second block costs a NEW lesson, so there is no state it can hold a session in.
+  assert.equal(decideCapacity({ lessons, max: 5, askedThisSession: true, askedAtCount: 4 }).action, 'pass')
+  assert.equal(decideCapacity({ lessons, max: 5, askedThisSession: true, askedAtCount: 3 }).action, 'ask')
+})
+
+test('a broken file is not counted towards capacity', () => {
+  const lessons = [lesson('a', 'aterm'), lesson('b', 'bterm'), parseLesson('bad.md', 'garbage')]
+
+  assert.equal(decideCapacity({ lessons, max: 3 }).count, 2)
+})
+
+test('over the cap is reported as over, not merely full', () => {
+  const lessons = ['a', 'b', 'c', 'd'].map(id => lesson(id, `${id}term`))
+
+  assert.equal(decideCapacity({ lessons, max: 3 }).overCap, true)
+})
+
+// The point of the block: "you are at 33 of 40" is a number somebody has to go and investigate. A
+// named pair sharing four triggers is a decision that can be made at the end of a turn.
+test('the proposals name specific entries and the strongest signal claims each one', () => {
+  const encoded = parseLesson(
+    'x.md',
+    '---\nid: graduated\ntrigger: xterm\nscope: build\nlearned: 2026-01-01\nencoded: .claude/harness/guard-x.mjs\n---\n\n**Lesson:** x\n'
+  )
+  const twins = [lesson('twin-a', 'hook, guard, fires'), lesson('twin-b', 'hook, guard, fires, extra')]
+  const cold = lesson('cold', 'coldterm')
+  const proposals = dispositionsFor([encoded, ...twins, cold], { 'twin-a': 3, 'twin-b': 2, cold: 7, graduated: 9 })
+
+  const by = disposition => proposals.filter(entry => entry.disposition === disposition)
+
+  assert.deepEqual(by('delete')[0].ids, ['graduated'], 'a lesson that says it was encoded elsewhere is duplicate enforcement')
+  assert.deepEqual(by('consolidate')[0].ids, ['twin-a', 'twin-b'])
+  assert.equal(by('consolidate').length, 1, 'the pair is claimed, so neither half is proposed twice')
+  assert.deepEqual(by('prune')[0].ids, ['cold'], 'only what no stronger signal claimed is offered as a plain prune')
+})
+
+// Deleting a zero-hit lesson is how the store loses its best entries first: it is usually filed under
+// words nobody types, not wrong.
+test('a lesson that has never matched is offered as a trigger fix, not a deletion', () => {
+  const proposals = dispositionsFor([lesson('never', 'obscureterm')], {})
+
+  assert.equal(proposals[0].disposition, 'retrigger')
+  assert.match(proposals[0].why, /never matched/)
+})
+
+test('the proposal list is bounded, so the block stays readable', () => {
+  const lessons = Array.from({ length: 30 }, (_, i) => lesson(`l${i}`, `t${i}`))
+
+  assert.ok(dispositionsFor(lessons, {}).length <= 8)
+})
+
+// Two gates arguing in one turn: one asking whether to add a lesson, the other saying there is nowhere
+// to put it.
+test('the lesson prompt stands down while the capacity gate owns the turn', () => {
+  const candidates = [{ kind: 'correction', at: '2026-01-02', text: 'x' }]
+
+  assert.equal(decide({ candidates }).action, 'ask')
+  assert.equal(decide({ candidates, storeFull: true }).action, 'pass')
 })

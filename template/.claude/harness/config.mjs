@@ -162,7 +162,15 @@ export const DEFAULTS = {
     // so growth must be paid for by consolidating or pruning. Raising it is how a curated set becomes
     // a log.
     max: 40,
-    maxBodyLines: 25
+    maxBodyLines: 25,
+
+    // Where `lesson-capacity.mjs` stops the turn and makes the model put the disposition question —
+    // consolidate, graduate, delete — to the USER. Null derives it from `max` (80%, so 32 of 40).
+    //
+    // Deliberately BELOW the cap. A store that is exactly full has already lost the argument: the
+    // review that makes room has to happen while there is still somewhere to put the next lesson, and
+    // the alternative is a session that discovers the problem by failing the audit.
+    reviewAt: null
   },
 
   candidates: {
@@ -581,6 +589,7 @@ export const statePaths = config => {
     haltReport: `${dir}/halt-report.md`,
     lessonsState: `${dir}/lessons-state.json`,
     lessonPromptState: `${dir}/lesson-prompt-state.json`,
+    lessonCapacityState: `${dir}/lesson-capacity-state.json`,
     candidates: `${dir}/candidates.jsonl`,
     editCheckState: `${dir}/edit-check-state.json`,
     runs: `${dir}/runs`,

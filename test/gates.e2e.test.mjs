@@ -7,7 +7,7 @@
 
 import { strict as assert } from 'node:assert'
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { after, test } from 'node:test'
 
 import { bashPayload, editPayload, makeRepo, runHook, stopPayload } from './helpers.mjs'
@@ -205,6 +205,99 @@ test('a green run clears a counter that was one step from halting', () => {
   runHook(green, 'record-activity.mjs', editPayload({ file: 'src/a.ts' }))
 
   assert.equal(runHook(green, 'verify-gate.mjs', stopPayload({})), null)
+})
+
+// ── lesson-capacity ────────────────────────────────────────────────────────────
+//
+// The gate whose whole job is to fire without being asked. A pure-function test cannot tell the
+// difference between "decides to ask" and "asks", and the difference is the entire feature.
+
+const writeLessons = (repo, ids) => {
+  mkdirSync(repo.path('.claude/lessons'), { recursive: true })
+
+  for (const id of ids) {
+    writeFileSync(
+      repo.path(`.claude/lessons/${id}.md`),
+      `---\nid: ${id}\ntrigger: ${id}term\nscope: build\nlearned: 2026-01-01\n---\n\n**Lesson:** ${id} matters.\n`
+    )
+  }
+}
+
+test('lesson-capacity stays silent while there is room', () => {
+  const repo = fresh({ lessons: { max: 10 } })
+
+  writeLessons(repo, ['a', 'b', 'c'])
+
+  assert.equal(runHook(repo, 'lesson-capacity.mjs', stopPayload({})), null)
+})
+
+test('lesson-capacity blocks at the threshold and hands the question to the user', () => {
+  const repo = fresh({ lessons: { max: 5 } })
+
+  writeLessons(repo, ['alpha', 'beta', 'gamma', 'delta'])
+
+  const response = runHook(repo, 'lesson-capacity.mjs', stopPayload({}))
+
+  assert.equal(response?.decision, 'block')
+  assert.match(response.reason, /AskUserQuestion/, 'the model must put it to the user, not decide it alone')
+  assert.match(response.reason, /alpha|beta|gamma|delta/, 'it names specific entries, not just a count')
+  assert.match(response.reason, /CONSOLIDATE/)
+  assert.match(response.reason, /GRADUATE/)
+  assert.match(response.reason, /DELETE/)
+  assert.match(response.reason, /Raising `lessons.max` is not on that list/)
+})
+
+// Bounded, like every other blocking gate here: a second block costs a new lesson.
+test('lesson-capacity asks once per session unless the store grew', () => {
+  const repo = fresh({ lessons: { max: 5 } })
+
+  writeLessons(repo, ['alpha', 'beta', 'gamma', 'delta'])
+
+  assert.equal(runHook(repo, 'lesson-capacity.mjs', stopPayload({}))?.decision, 'block')
+  assert.equal(runHook(repo, 'lesson-capacity.mjs', stopPayload({})), null, 'the same session is not asked twice')
+
+  writeLessons(repo, ['epsilon'])
+
+  assert.equal(runHook(repo, 'lesson-capacity.mjs', stopPayload({}))?.decision, 'block', 'a new lesson re-opens the question')
+})
+
+test('lesson-capacity never blocks a turn that is already blocked, or a store that is switched off', () => {
+  const repo = fresh({ lessons: { max: 5 } })
+
+  writeLessons(repo, ['alpha', 'beta', 'gamma', 'delta'])
+
+  assert.equal(runHook(repo, 'lesson-capacity.mjs', stopPayload({ active: true })), null)
+
+  const off = fresh({ lessons: { max: 5, enabled: false } })
+
+  writeLessons(off, ['alpha', 'beta', 'gamma', 'delta'])
+
+  assert.equal(runHook(off, 'lesson-capacity.mjs', stopPayload({})), null)
+})
+
+// Two Stop gates arguing in one turn — one asking whether to add a lesson, the other saying there is
+// nowhere to put it — is the state this coupling exists to prevent.
+test('the lesson prompt stands down while the store is at the threshold', () => {
+  const repo = fresh({ lessons: { max: 5 } })
+
+  mkdirSync(repo.path('.claude/.harness'), { recursive: true })
+  writeFileSync(
+    repo.path('.claude/.harness/candidates.jsonl'),
+    `${JSON.stringify({ kind: 'correction', at: '2026-01-02T00:00:00Z', text: 'no, not like that' })}\n`
+  )
+
+  assert.equal(runHook(repo, 'lesson-prompt.mjs', stopPayload({}))?.decision, 'block', 'it asks with room to spare')
+
+  const full = fresh({ lessons: { max: 5 } })
+
+  mkdirSync(full.path('.claude/.harness'), { recursive: true })
+  writeFileSync(
+    full.path('.claude/.harness/candidates.jsonl'),
+    `${JSON.stringify({ kind: 'correction', at: '2026-01-02T00:00:00Z', text: 'no, not like that' })}\n`
+  )
+  writeLessons(full, ['alpha', 'beta', 'gamma', 'delta'])
+
+  assert.equal(runHook(full, 'lesson-prompt.mjs', stopPayload({})), null)
 })
 
 // ── selftest ───────────────────────────────────────────────────────────────────

@@ -20,6 +20,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 import { block, load, readPayload } from './config.mjs'
+import { reviewThreshold } from './lesson-capacity.mjs'
+import { loadLessons } from './lessons.mjs'
 
 const readJson = (path, fallback) => {
   try {
@@ -51,8 +53,13 @@ const readCandidates = config => {
 //
 // Exported and tested. The expected rate is about one lesson per session, FREQUENTLY ZERO — so the bar
 // for even asking is "something was captured this session that has not been reviewed".
-export const decide = ({ candidates = [], askedThisSession = false, sessionStartedAt = null }) => {
+export const decide = ({ candidates = [], askedThisSession = false, sessionStartedAt = null, storeFull = false }) => {
   if (askedThisSession) return { action: 'pass', why: 'already asked this session' }
+
+  // `lesson-capacity.mjs` is blocking this same turn to ask what gets consolidated, graduated or
+  // deleted. Asking whether to ADD one in the same breath is two gates arguing, and the answer to the
+  // capacity question decides whether there is anywhere to put this one.
+  if (storeFull) return { action: 'pass', why: 'the store is at the review threshold — the capacity gate owns this turn' }
 
   const fresh = sessionStartedAt ? candidates.filter(entry => entry.at >= sessionStartedAt) : candidates
 
@@ -82,7 +89,8 @@ const main = async () => {
   const verdict = decide({
     candidates: readCandidates(config),
     askedThisSession: state.session === session,
-    sessionStartedAt: state.startedAt
+    sessionStartedAt: state.startedAt,
+    storeFull: loadLessons(config.lessons.dir).filter(lesson => !lesson.error).length >= reviewThreshold(config.lessons)
   })
 
   if (verdict.action !== 'ask') process.exit(0)

@@ -55,7 +55,7 @@ so there is no second copy to drift.
 - **Agents, skills and `CONVENTIONS.md` are never overwritten in a target repo**, not even with
   `--force`. Those are prompts the user has tuned; silently restoring the stock version is invisible
   damage.
-- **Not every gate exports `decide()`** — seven of them do. A new blocking gate should.
+- **Not every gate exports `decide()`** — eight of them do. A new blocking gate should.
 
 ## Tests
 

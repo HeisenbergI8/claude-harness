@@ -38,6 +38,7 @@ const SCRIPTS = [
   'build-trigger.mjs',
   'lessons.mjs',
   'lesson-prompt.mjs',
+  'lesson-capacity.mjs',
   'candidates.mjs',
   'transcripts.mjs',
   'cost.mjs',

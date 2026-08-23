@@ -14,6 +14,7 @@ running it twice adds nothing, and hooks you already had are never displaced.
 | `PostToolUseFailure` | `Bash` | `record-activity.mjs`, `loop-breaker.mjs` | yes |
 | `SubagentStop` | — | `record-activity.mjs`, `verify-gate.mjs` | yes |
 | `Stop` | — | `claim-check.mjs`, `verify-gate.mjs` | yes |
+| `Stop` | — | `lesson-capacity.mjs`, `lesson-prompt.mjs` | yes |
 
 `hook-heartbeat.mjs` is never registered directly — the others call it.
 

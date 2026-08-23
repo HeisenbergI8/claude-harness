@@ -253,6 +253,15 @@
             "type": "command",
             "command": "node",
             "args": [
+              ".claude/harness/lesson-capacity.mjs"
+            ],
+            "statusMessage": "Checking whether the lesson store is full",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
               ".claude/harness/lesson-prompt.mjs"
             ],
             "statusMessage": "Checking for anything worth learning",
