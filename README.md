@@ -160,7 +160,7 @@ So this harness records what happened and compares the claim against the record.
 
 | Guard | Refuses |
 | --- | --- |
-| `guard-destructive` | Deletion, overwrite or move reaching outside the repo; `git clean -f`, `reset --hard`, `checkout -- .` |
+| `guard-destructive` | Deletion, overwrite or move reaching outside the repo; `git clean -f`, `reset --hard`, `checkout -- .`, and the `stash`/`stash pop` round trip that buries someone else's uncommitted work |
 | `guard-secrets` | Credentials into the transcript (`cat .env`) or into the repo |
 | `guard-commit` | A commit carrying a credential file, build output, a second lockfile, or a red tree |
 | `guard-write` | Writes outside the repo, for anyone; writes outside their role, for named agents |

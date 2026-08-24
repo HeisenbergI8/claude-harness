@@ -15,6 +15,7 @@
 //   git reset --hard    discards uncommitted changes
 //   git checkout -- .   same
 //   git restore .       same
+//   git stash && <check> && git stash pop    destroys work this agent did not create
 //
 // ── SCOPED TO THE BINARY, PER SEGMENT — NEVER THE RAW STRING ───────────────────
 //
@@ -123,6 +124,35 @@ export const inspect = command => {
   if (/:\(\)\s*\{.*\}\s*;\s*:/.test(command)) return 'Blocked: fork bomb.'
 
   const segments = splitCommands(command)
+
+  // ── THE STASH ROUND TRIP IS A SHAPE, NOT A BINARY ──────────────────────────
+  //
+  // `git stash && npm test && git stash pop` is how an agent proves to itself that a red check is
+  // pre-existing. It is also the one git sequence that can destroy work the agent did not create: a
+  // `pop` that conflicts leaves the tree half-merged with the stash still on the stack, and the
+  // uncommitted work it just buried may belong to a SECOND Claude Code session editing the same
+  // checkout. Nothing in the tool output distinguishes that case from a clean pop.
+  //
+  // Scoped to the round trip, and to segments whose invoked binary is actually `git`. A bare
+  // `git stash` and a bare `git stash pop` are both ordinary work and both pass — refusing them would
+  // be the kind of false block that gets a guard switched off.
+  const gitSegments = segments.map(segment => segment.trim()).filter(segment => binaryOf(segment) === 'git')
+
+  if (
+    gitSegments.some(segment => /^git\s+stash\b(?!\s+(list|show|drop|clear|pop|apply))/.test(segment)) &&
+    gitSegments.some(segment => /^git\s+stash\s+(pop|apply)\b/.test(segment))
+  ) {
+    return (
+      'Blocked: a stash-and-restore round trip in one command. A `git stash pop` that conflicts leaves ' +
+      'the tree half-merged with the stash still on the stack — and the uncommitted work it buried may ' +
+      'belong to another session editing this same checkout.\n\n' +
+      'If you are establishing whether a failure is pre-existing, compare against the committed version ' +
+      'instead. It changes nothing:\n\n' +
+      '  git show HEAD:<path> | diff - <path>\n' +
+      '  git diff HEAD -- <path>\n\n' +
+      'Red in code this turn did not touch is evidence about the tree, not a defect to fix.'
+    )
+  }
 
   // `cd` moves the ground under every later segment: `cd ~ && rm -rf Documents` reads as an in-repo
   // relative path while deleting your home directory. That is natural phrasing rather than evasion, so

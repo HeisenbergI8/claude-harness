@@ -64,7 +64,7 @@ local database. Used by ~20 operations staff._
 
 ## Reporting rules
 
-<!-- These three hold in every project. They are here rather than in the agent prompts because they are
+<!-- These four hold in every project. They are here rather than in the agent prompts because they are
      about YOUR backlog, and an agent cannot infer any of them from the code. Delete one only if you
      genuinely disagree with it. -->
 
@@ -79,6 +79,13 @@ local database. Used by ~20 operations staff._
   but because writing a date for a measurement you did not take is a deliberate act rather than an
   accident of momentum. It also makes the claim checkable later; `NULL on all rows` reads as eternally
   true.
+- **Red is not automatically yours.** A failing typecheck, lint or test in code this turn did not touch
+  is evidence about the tree, not a defect to fix. Where more than one session or person has uncommitted
+  work in the same checkout, it is usually theirs — and "fixing" it overwrites work in progress that
+  looks, from inside a single session, exactly like a mistake. Establish provenance first, and never by
+  stashing: `git show HEAD:<path> | diff - <path>` compares against the committed version and changes
+  nothing. `git stash && <check> && git stash pop` is refused by `guard-destructive` for that reason —
+  a `pop` that conflicts buries whatever was uncommitted.
 - **A priority label is not permission to start.** "Critical" or "P1" in a spec or a ticket says what
   matters, not what is next, and not what has already been decided against. Check whatever records
   decisions in this project before planning from a label.

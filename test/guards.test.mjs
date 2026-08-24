@@ -43,7 +43,12 @@ for (const command of [
   'echo hi > ~/.zshrc',
   'cat config > /etc/thing',
   'node -e "require(\'fs\').rmSync(\'/tmp/../etc\', {recursive:true})"',
-  ':(){ :|:& };:'
+  ':(){ :|:& };:',
+
+  // The stash round trip: proving a red check is pre-existing by burying whatever is uncommitted.
+  'git stash && npm test && git stash pop',
+  'git stash -u && npm run typecheck && git stash pop',
+  'git stash push -m probe; npm run verify; git stash apply'
 ]) {
   test(`destructive BLOCK: ${command.slice(0, 52)}`, () => {
     assert.ok(inspectDestructive(command), `should have been blocked: ${command}`)
@@ -91,7 +96,19 @@ for (const command of [
   'cp -r src/a src/b',
   'find . -name "*.test.ts"',
   'tee build.log',
-  'echo done > build.log'
+  'echo done > build.log',
+
+  // Each HALF of the stash round trip is ordinary work. Only the round trip in one command is refused,
+  // and the sequence is still reachable as two separate calls — this guard slows the reflex, it does
+  // not remove the capability.
+  'git stash',
+  'git stash pop',
+  'git stash -u',
+  'git stash push -m wip',
+  'git stash list',
+  'git stash show -p',
+  'git stash apply stash@{0}',
+  'grep -rn "git stash && npm test && git stash pop" docs/'
 ]) {
   test(`destructive ALLOW: ${command.slice(0, 52)}`, () => {
     assert.equal(inspectDestructive(command), null, `should NOT have been blocked: ${command}`)
