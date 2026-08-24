@@ -279,6 +279,63 @@ Two things that stay true at every rung:
 
 ---
 
+## Agent locks
+
+Two Claude Code sessions in one checkout are two models that cannot see each other. The failure is not a
+merge conflict — git would report that. It is silent, and it was observed:
+
+Session B has uncommitted work in progress. Session A reads those files, finds nothing marking them as
+anybody's, and edits them. Or A runs the fast check, sees B's half-finished module go red, and sets
+about repairing it — because *from inside A, a red check is indistinguishable from a defect*.
+
+### Staleness is a property of reading, not an operation
+
+The obvious implementation is a lock table: read it, add your entry, write it back, and have somebody
+sweep the expired rows. Both halves are wrong here, for the same reason.
+
+Read-modify-write cannot be right in a mechanism whose entire premise is concurrent writers — the slower
+writer discards the faster one's claim, and **a dropped claim produces exactly the stomp the lock was
+taken to prevent**, silently, failing open. So the record is an append-only log of claim / refresh /
+release events, and the current lock table is a fold over it. Same reasoning as the ledger, higher
+stakes: a lost ledger line costs a gate one fact, a lost claim costs somebody their work.
+
+Once it is a fold, expiry stops being an operation. A lock nothing has refreshed inside `staleMs` simply
+is not in the fold. Nobody sweeps it; there is no cron, no `SessionStart` cleanup, and no dependence on
+`Stop` firing — which matters, because when a session crashes `Stop` is exactly what does not fire. The
+release hook is a promptness optimisation, and it says so in its own header, because a release mechanism
+the correctness of the system depended on would have to be reliable, and hooks are not.
+
+### The deny does not name its own escape hatch
+
+The first draft ended with `run --release-all to override`. **The model has Bash.** A refusal that
+explains how to clear itself is a refusal that gets cleared rather than obeyed, and the mechanism becomes
+decoration with a state file attached.
+
+The escape hatches are real — `maxBlocks`, `AGENT_LOCKS_DISABLE=1`, the CLI — and they are documented
+where a *person* reads them. What the model is told is the true thing: somebody else is working here,
+their files on disk are work in progress rather than a mistake, stop and say so. It also carries the
+non-destructive way to establish whether a failure is yours (`git show HEAD:<path> | diff - <path>`),
+because the reflex it is competing with is `git stash && <check> && git stash pop` — which `guard-destructive`
+refuses, since a `pop` that conflicts buries whatever was uncommitted, and that may be the other session's.
+
+### The scope function is configuration, not cleverness
+
+`moduleRootOf` is the highest-risk function in the mechanism: a bug in it produces false refusals, which
+is the one failure this cannot survive. It is therefore driven by `locks.roots`, and **its default is
+exact-file scope** — the narrowest true positive. Two sessions editing the same file is a conflict in
+every project; two sessions in the same directory is not. Widening to a module grain is an explicit act
+by somebody who knows their own repo.
+
+Containment respects segment boundaries in both directions, or a lock on `sc-winner` blocks every write
+to `sc-winner-extra`. And `locks.shared` exists because without it the first session to register a module
+locks the shared registry every module edits, and denies everyone else's correct registration forever.
+
+### It is off by default
+
+Applying the promotion ladder to the mechanism's own shipping. It is also honest scoping: a repo where
+one session runs at a time gets nothing from this but a chance to be wrong, and a repo that gives each
+session its own `git worktree` has solved the problem completely rather than partially.
+
 ## Testing philosophy
 
 **The ALLOW half is the important half.** A gate that blocks honest work gets switched off, and a
@@ -303,3 +360,4 @@ compatible states.
 | Drop `stripQuoted` | every USE-vs-MENTION case |
 | Classify against the raw command string | every "MENTION is not evidence" case |
 | Rename a ledger field in the writer only | most of `reader-writer.test.mjs` |
+| `basename` → `endsWith` in `agent-locks.mjs` | 7 lock cases — `guard-agent-locks.mjs` ends with `agent-locks.mjs`, so the guard runs the library's CLI on import and exits before reading its payload |

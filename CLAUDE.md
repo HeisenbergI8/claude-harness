@@ -48,6 +48,10 @@ so there is no second copy to drift.
   `agent_type` off the payload. (`tools:` in frontmatter *does* work.)
 - **Editing a copied script changes nothing here.** A repo installed for testing holds a copy; fix
   `template/` and reinstall.
+- **Script names nest here too.** `guard-agent-locks.mjs` and `release-agent-locks.mjs` both end with
+  `agent-locks.mjs`, so the usual `process.argv[1]?.endsWith(name)` main-guard makes them run the
+  library's CLI on import. Those three compare `basename` instead; a new script whose name is a suffix
+  of another's must do the same.
 - **`BUILTIN_EVIDENCE` in `config.mjs` is ordered and first-match-wins**, because script names nest:
   `verify:fast` precedes `verify` (which carries a lookahead so it cannot swallow its own
   colon-suffixed variants), and `e2e` precedes `test` so `test:e2e` is not read as a plain test
@@ -55,7 +59,7 @@ so there is no second copy to drift.
 - **Agents, skills and `CONVENTIONS.md` are never overwritten in a target repo**, not even with
   `--force`. Those are prompts the user has tuned; silently restoring the stock version is invisible
   damage.
-- **Not every gate exports `decide()`** — eight of them do. A new blocking gate should.
+- **Not every gate exports `decide()`** — nine of them do. A new blocking gate should.
 
 ## Tests
 

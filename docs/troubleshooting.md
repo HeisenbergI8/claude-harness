@@ -33,6 +33,24 @@ disabling everything:
 `verifyGate`, `claimCheck`, `loopBreaker` and `heartbeat` take the same switch. See
 [`configuration.md`](configuration.md) for thresholds you can loosen instead of disabling.
 
+## A write is refused with "AGENT LOCK"
+
+Another Claude Code session in this same checkout has been writing in that module within the last 30
+minutes. That is the mechanism working — see [design.md](design.md#agent-locks).
+
+`node .claude/harness/agent-locks.mjs` lists what is held, by whom, and for how long. If the lock is
+wrong — the other session is finished, or it was a session id that changed under a resume — clear it:
+
+```bash
+node .claude/harness/agent-locks.mjs --release-all
+AGENT_LOCKS_DISABLE=1 claude          # or switch the whole mechanism off for one session
+```
+
+It cannot trap you either way: after `locks.maxBlocks` consecutive refusals in one scope the guard
+stands aside. If it is refusing work that was fine, the cause is almost always `locks.roots` being
+wider than your real module boundary. Narrowing it to `[]` falls back to exact-file scope, which only
+fires when two sessions edit the same file.
+
 ## I want it gone
 Delete `.claude/harness/`, `harness.config.json`, and the harness entries under `hooks` in
 `.claude/settings.json` — they are the ones whose commands mention `.claude/harness/`. Anything else in

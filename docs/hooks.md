@@ -9,14 +9,18 @@ running it twice adds nothing, and hooks you already had are never displaced.
 
 | Event | Matcher | Script | Blocking |
 | --- | --- | --- | --- |
+| `PreToolUse` | `Write\|Edit\|NotebookEdit\|MultiEdit` | `guard-agent-locks.mjs`, `guard-write.mjs`, `guard-secrets.mjs` | yes |
+| `PreToolUse` | `Bash` | `guard-destructive.mjs`, `guard-secrets.mjs`, `guard-commit.mjs` | yes |
 | `PostToolUse` | `Write\|Edit\|NotebookEdit\|MultiEdit\|Bash` | `record-activity.mjs` | no |
 | `PostToolUse` | `Bash` | `loop-breaker.mjs` | yes |
 | `PostToolUseFailure` | `Bash` | `record-activity.mjs`, `loop-breaker.mjs` | yes |
 | `SubagentStop` | — | `record-activity.mjs`, `verify-gate.mjs` | yes |
 | `Stop` | — | `claim-check.mjs`, `verify-gate.mjs` | yes |
-| `Stop` | — | `lesson-capacity.mjs`, `lesson-prompt.mjs` | yes |
+| `Stop` | — | `lesson-capacity.mjs`, `lesson-prompt.mjs`, `release-agent-locks.mjs` | yes |
 
-`hook-heartbeat.mjs` is never registered directly — the others call it.
+`hook-heartbeat.mjs` is never registered directly — the others call it. `guard-agent-locks.mjs` is
+registered but stands aside until `locks.enabled` is true; it beats first, so the selftest can tell
+"registered but switched off" from "registered but dead".
 
 **Hooks are read at session startup.** Editing `settings.json` does nothing until you restart, and that
 window is exactly when "configured" and "firing" differ. Run `selftest.mjs` after a restart and one turn.

@@ -63,6 +63,16 @@
     "maxConsecutiveFailures": 2
   },
 
+  "//locks": "Which session owns which part of the tree, for repos where more than one Claude Code session shares one checkout. OFF by default. `roots` names your module boundary — empty means exact-file scope, which is the narrowest thing that is a conflict in every project. `shared` is the files every module touches by convention; without it the first session to register a module locks the shared registry and denies everyone else's correct work.",
+  "locks": {
+    "enabled": true,
+    "roots": ["src/views/apps/admin/*", "packages/*", ".claude/plans/*"],
+    "shared": ["package.json", "src/store/index.ts", "src/components/layout/VerticalMenu.tsx"],
+    "//staleMs": "Long enough that thinking between edits does not drop the lock, short enough that a conversation switched away from clears within one break.",
+    "staleMs": 1800000,
+    "maxBlocks": 2
+  },
+
   "//readOnlyAgents": "Agents with no write access to source. They are exempt from the repair loop, because blocking them demands a fix they cannot make — and every block replays their whole context. Names match the `name:` in the agent's frontmatter.",
   "readOnlyAgents": ["tester", "auditor", "change-auditor", "Explore"],
 

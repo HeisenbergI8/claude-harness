@@ -164,6 +164,7 @@ So this harness records what happened and compares the claim against the record.
 | `guard-secrets` | Credentials into the transcript (`cat .env`) or into the repo |
 | `guard-commit` | A commit carrying a credential file, build output, a second lockfile, or a red tree |
 | `guard-write` | Writes outside the repo, for anyone; writes outside their role, for named agents |
+| `guard-agent-locks` | A write into a module another Claude Code session is working in. **Off by default** — see [agent locks](#agent-locks-when-two-sessions-share-one-checkout) |
 
 **Agents** — role separation that a guard makes real rather than promised.
 
@@ -406,6 +407,45 @@ That is one guard with two failure directions, chosen per actor and written down
 the same axis — it fails open when git is unreadable, since refusing every commit because `git` moved is
 a worse outcome than missing one check.
 
+## Agent locks: when two sessions share one checkout
+
+Off by default. Turn it on with `"locks": { "enabled": true }` if — and only if — more than one Claude
+Code session works in the same working tree.
+
+Two sessions in one checkout are two models that cannot see each other, and the failure is not a merge
+conflict, which git would report. It is silent: session B has uncommitted work in progress, session A
+reads those files, finds nothing marking them as anybody's, and edits them. Or A runs the fast check,
+sees B's half-finished module go red, and sets about repairing it — because **from inside A, a red check
+is indistinguishable from a defect.**
+
+So a `PreToolUse` guard records which session is writing where, claims the module on the first write, and
+refuses a write into a scope somebody else is holding. Four things decide whether that is usable:
+
+- **Expiry is a property of reading.** The record is an append-only log and the lock table is a fold over
+  it, because read-modify-write in a mechanism whose premise is concurrent writers loses claims — and a
+  lost claim causes exactly the stomp it was taken to prevent. Once it is a fold, a lock nothing has
+  refreshed inside 30 minutes simply is not there. Nobody sweeps it, no cron, and no dependence on `Stop`
+  firing — which matters, because when a session crashes `Stop` is what does not fire.
+- **The deny does not name its own escape hatch.** The first draft ended with "run `--release-all` to
+  override". The model has Bash. A refusal that explains how to clear itself gets cleared rather than
+  obeyed. The overrides are real and documented where a *person* reads them; what the model is told is
+  that somebody else is working there and their files are work in progress, not a mistake.
+- **The scope is configuration, not cleverness.** `locks.roots` names your module boundary, and its
+  default is exact-file scope — the narrowest true positive, since two sessions editing the same file is
+  a conflict in every project in a way that two sessions in the same directory is not.
+- **It cannot trap a session.** After `locks.maxBlocks` refusals in one scope the guard stands aside.
+
+```bash
+node .claude/harness/agent-locks.mjs                # what is held, by whom, for how long
+node .claude/harness/agent-locks.mjs --release-all  # clear everything
+AGENT_LOCKS_DISABLE=1 claude                        # off for one session
+```
+
+**If each session can have its own `git worktree`, do that instead** — it solves this completely, where
+locks solve it partially. This is for the case where one checkout is genuinely shared. It also does not
+help with two sessions writing the same shared file at once; that is a merge problem and locks are not a
+merge tool.
+
 ## Memory: a store designed to shrink
 
 Two tiers, with opposite economics. `candidates` is episodic: incidents captured automatically from
@@ -524,6 +564,8 @@ Full symptom list, per-gate switches and how to remove the harness entirely:
 ## Honest limits
 
 - **`disableAllHooks` turns all of this off.** It is a guardrail, not a sandbox.
+- **Agent locks are advisory and per-checkout.** They stop a confused session, not a determined one, and
+  they say nothing about two sessions writing the same shared file at the same moment.
 - **A hook cannot spawn an agent.** It can only refuse a turn and say what to launch. Anything described
   here as "enforced" means *refused and explained*, never *performed automatically*.
 - **The auditors have no write tools, but they do have Bash.** They are guarded on the write path, not

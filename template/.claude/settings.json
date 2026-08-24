@@ -54,6 +54,14 @@
             "type": "command",
             "command": "node",
             "args": [
+              ".claude/harness/guard-agent-locks.mjs"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
               ".claude/harness/guard-write.mjs"
             ],
             "timeout": 30
@@ -266,6 +274,14 @@
             ],
             "statusMessage": "Checking for anything worth learning",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              ".claude/harness/release-agent-locks.mjs"
+            ],
+            "timeout": 15
           }
         ]
       }

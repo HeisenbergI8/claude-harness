@@ -248,6 +248,41 @@
           "type": "string"
         }
       }
+    },
+    "locks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Which Claude Code session owns which part of the tree, for repos where more than one session shares a checkout. Off by default.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Off by default. A repo with one session at a time gets nothing from this, and a repo giving each session its own git worktree has solved the problem better."
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Segment patterns naming your module boundary, e.g. \"packages/*\". Each segment matches one path segment and may contain `*`. Empty means exact-file scope, which is the narrowest true positive."
+        },
+        "shared": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Globs for files every module touches by convention. Never auto-locked and never denied \u2014 without this the first session to register a module locks the shared registry for everyone."
+        },
+        "staleMs": {
+          "type": "integer",
+          "minimum": 60000,
+          "description": "How long a lock survives without a write from its owner. A lock claimed by hand ignores this."
+        },
+        "maxBlocks": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Consecutive denials in one scope before the guard stands aside. It must never be able to trap a session."
+        }
+      }
     }
   }
 }

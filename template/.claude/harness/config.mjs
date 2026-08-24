@@ -227,6 +227,64 @@ export const DEFAULTS = {
     maxConsecutiveFailures: 2
   },
 
+  // ── Agent locks ──────────────────────────────────────────────────────────────
+  //
+  // Which session owns which part of the tree, for repos where more than one Claude Code session shares
+  // one checkout. See `agent-locks.mjs`. OFF by default, and deliberately so: a repo with one session at
+  // a time gets nothing from this but a chance to be wrong, and a repo giving each session its own
+  // `git worktree` has already solved the problem better.
+  locks: {
+    enabled: false,
+
+    // The level at which YOUR project's work divides — the module boundary. Each pattern segment matches
+    // one path segment and may contain `*`:
+    //
+    //   "src/views/apps/admin/*"   one lock per directory under admin
+    //   "packages/*"               one lock per package
+    //   "services/*/internal"      exactly that directory, in every service
+    //
+    // EMPTY MEANS EXACT-FILE SCOPE, which is the narrowest true positive: two sessions editing the same
+    // file is a conflict in every project, in a way that two sessions editing the same directory is not.
+    // Widening to your module grain is an explicit act, because that is where false refusals come from —
+    // and a guard that refuses correct work gets switched off, and then it protects nothing.
+    roots: [],
+
+    // Files every module touches by convention. Without this list the FIRST session to register a module
+    // locks the shared registry, and every other session's perfectly correct registration is denied —
+    // which is the textbook way a guard earns a reputation for being wrong.
+    //
+    // These are the cross-ecosystem ones. Add your own: the store registration, the nav, the route table.
+    shared: [
+      'package.json',
+      'package-lock.json',
+      'yarn.lock',
+      'pnpm-lock.yaml',
+      'go.mod',
+      'go.sum',
+      'Cargo.toml',
+      'Cargo.lock',
+      'pyproject.toml',
+      'requirements.txt',
+      'CLAUDE.md',
+      'CONVENTIONS.md',
+      'README.md',
+      'harness.config.json',
+      '.claude/settings.json',
+      '.claude/settings.local.json',
+      '.claude/.harness/**'
+    ],
+
+    // How long a lock survives without a write from its owner. Long enough that thinking between edits
+    // does not drop it, short enough that a conversation switched away from clears within one break.
+    // A lock claimed by hand (`--claim`) ignores this entirely.
+    staleMs: 30 * 60 * 1000,
+
+    // Consecutive denials in one scope before the guard stands aside. It must never be able to trap a
+    // session: the model has been told twice that somebody else is working there, and a third identical
+    // refusal carries no new information.
+    maxBlocks: 2
+  },
+
   // Everything the harness writes at runtime. One directory so it is trivial to gitignore or wipe.
   state: { dir: '.claude/.harness' }
 }
@@ -582,6 +640,8 @@ export const statePaths = config => {
     verifyState: `${dir}/verify-state.json`,
     claimState: `${dir}/claim-state.json`,
     loopState: `${dir}/loop-state.json`,
+    locks: `${dir}/locks.jsonl`,
+    lockState: `${dir}/lock-state.json`,
     reviewState: `${dir}/review-state.json`,
     heartbeatLog: `${dir}/heartbeat.jsonl`,
     heartbeatView: `${dir}/heartbeat.json`,

@@ -254,6 +254,61 @@ entirely — so a project that configures nothing pays nothing per turn.
 
 ---
 
+## `locks`
+
+Which Claude Code session owns which part of the tree, for repos where more than one session shares one
+checkout. **Off by default.**
+
+```json
+{
+  "locks": {
+    "enabled": true,
+    "roots": ["packages/*", "src/views/apps/admin/*"],
+    "shared": ["package.json", "src/store/index.ts"],
+    "staleMs": 1800000,
+    "maxBlocks": 2
+  }
+}
+```
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `enabled` | `false` | The switch. A repo with one session at a time gets nothing from this |
+| `roots` | `[]` | Segment patterns naming your module boundary. Empty means exact-file scope |
+| `shared` | lockfiles, manifests, `CLAUDE.md`, `.claude/` config | Never auto-locked, never denied |
+| `staleMs` | `1800000` (30 min) | How long a lock survives with no write from its owner |
+| `maxBlocks` | `2` | Consecutive refusals in one scope before the guard stands aside |
+
+**`roots` is the only setting that can hurt you.** Each pattern segment matches one path segment and may
+contain `*`, and the lock is taken at the matched level: `packages/*` gives one lock per package, so a
+refactor touching nine files in one package takes one lock rather than nine.
+
+Set it too wide and you refuse correct work — `src/*` locks a third of the repo on the first write, and
+a guard that refuses correct work is one people switch off. Leaving it **empty** is the conservative
+choice and the default: every file is its own lock, which fires only when two sessions edit the same
+file. That is a conflict in every project, in a way that "two sessions in the same directory" is not.
+
+**`shared` is what keeps the module grain usable.** Without it the first session to register a module
+locks whatever registry every module edits — the RTK store, the nav, the route table — and every other
+session's perfectly correct registration is denied. Enumerate the files your project touches by
+convention from everywhere. The defaults cover the cross-ecosystem ones only.
+
+**A lock claimed by hand never expires.** `agent-locks.mjs --claim <path>` records the session as
+`manual-<user>`, and `staleMs` does not apply to it. A person who typed the lock in meant it.
+
+```bash
+node .claude/harness/agent-locks.mjs                     # what is held, by whom, how long
+node .claude/harness/agent-locks.mjs --claim src/thing/   # take one by hand
+node .claude/harness/agent-locks.mjs --release-all        # clear everything
+AGENT_LOCKS_DISABLE=1 claude                              # switch it off for one session
+```
+
+Locks live in `.claude/.harness/locks.jsonl`, which is gitignored — they are per-checkout runtime state,
+not something to share.
+
+**If your sessions can each have their own `git worktree`, use that instead.** It solves the same problem
+completely, where this solves it partially. Locks are for the case where one checkout is shared.
+
 ## `state`
 
 ```json

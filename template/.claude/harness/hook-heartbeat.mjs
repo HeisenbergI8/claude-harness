@@ -178,7 +178,10 @@ export const INSTRUMENTED = [
   // Beats BEFORE it reads its own config, so a project that has not declared `commands.editCheck`
   // still shows a live hook rather than a dead one. "Registered but disabled" and "registered but
   // broken" must not look the same here.
-  'gate-edit-check'
+  'gate-edit-check',
+  // Same reasoning: beats BEFORE reading `locks.enabled`, so a repo that has not switched agent locks on
+  // still shows a live hook. "Registered but off" must not look like "registered but broken".
+  'guard-agent-locks'
 ]
 
 // ── CLI ────────────────────────────────────────────────────────────────────────
