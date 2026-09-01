@@ -15,7 +15,7 @@
   "author": "John Ross Rivera",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HeisenbergI8/provenly.git"
+    "url": "git+https://github.com/HeisenbergI8/provenly.git"
   },
   "type": "module",
   "engines": {
