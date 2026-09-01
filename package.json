@@ -1,6 +1,6 @@
 {
   "name": "provenly",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Mechanical evidence, gates, guards, agents and a supervised task loop for Claude Code: an activity ledger, a claim checker that blocks unsupported 'tests pass', and a repair loop that escalates on stuck failures rather than on retries.",
   "keywords": [
     "claude",
