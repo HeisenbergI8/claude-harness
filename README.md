@@ -10,6 +10,11 @@ No dependencies. Any language. Drop it into a repo, declare two commands, restar
 npx github:HeisenbergI8/provenly init
 ```
 
+![The claim-check gate refusing a false “tests pass”](https://raw.githubusercontent.com/HeisenbergI8/provenly/main/demo/claim-check.gif)
+
+*The Stop hook run on the payload Claude Code sends it, against a ledger the harness recorded from a
+genuinely failing `npm test` — every character is real output. Rebuild it with `demo/build-fixture.sh && vhs demo/claim-check.tape`.*
+
 ---
 
 ## Quickstart
