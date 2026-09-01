@@ -1,4 +1,4 @@
-# claude-harness
+# provenly
 
 **Mechanical evidence for Claude Code.** A per-turn ledger of what actually ran, a gate that blocks
 unsupported claims that the tests passed, and a repair loop that escalates on *stuck* failures rather
@@ -7,7 +7,7 @@ than on retries.
 No dependencies. Any language. Drop it into a repo, declare two commands, restart the session.
 
 ```bash
-npx github:HeisenbergI8/claude-harness init
+npx github:HeisenbergI8/provenly init
 ```
 
 ---
@@ -28,7 +28,7 @@ Git Bash and WSL are all fine.
 
 ```bash
 cd /path/to/your/project
-npx github:HeisenbergI8/claude-harness init
+npx github:HeisenbergI8/provenly init
 ```
 
 It works out what kind of project this is, then **asks you to confirm the only two things it needs** —
@@ -70,8 +70,8 @@ the stock version is invisible damage.
 <summary>Installing without <code>npx</code>, and the non-interactive flags</summary>
 
 ```bash
-git clone https://github.com/HeisenbergI8/claude-harness
-node claude-harness/bin/harness-init.mjs /path/to/your/repo
+git clone https://github.com/HeisenbergI8/provenly
+node provenly/bin/harness-init.mjs /path/to/your/repo
 ```
 
 In a script or CI there is no terminal to prompt on, so it takes the detected values silently. `--yes`
@@ -602,3 +602,6 @@ comments are from that system; the reasoning is what carried over. Nothing proje
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+*Not affiliated with or endorsed by Anthropic. "Claude" and "Claude Code" are trademarks of
+Anthropic, PBC, used here only to describe what this tool works with.*

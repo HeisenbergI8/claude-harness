@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Installs the harness into a target repository.
 //
-//   npx github:HeisenbergI8/claude-harness init  install into the current directory
+//   npx github:HeisenbergI8/provenly init      install into the current directory
 //   node bin/harness-init.mjs [target]         install (or top up) into `target`, default cwd
 //                                              a bare leading `init` is a subcommand, not a target
 //   node bin/harness-init.mjs --dry-run        print every change without making one
@@ -36,7 +36,7 @@ const flags = new Set(args.filter(arg => arg.startsWith('--')))
 
 // ── `init` IS A SUBCOMMAND, NOT A DIRECTORY ────────────────────────────────────
 //
-// The documented install is `npx github:HeisenbergI8/claude-harness init`, so `init` arrives here as a
+// The documented install is `npx github:HeisenbergI8/provenly init`, so `init` arrives here as a
 // positional argument — and the only positional this script takes is the TARGET DIRECTORY. Without
 // this it installed into a new subdirectory called `init`, and did so silently: every path it printed
 // was plausible, and the repo the user was standing in got nothing.
@@ -291,7 +291,7 @@ export const ensureGitignore = (text, entry) => {
 
   const suffix = text && !text.endsWith('\n') ? '\n' : ''
 
-  return `${text ?? ''}${suffix}\n# claude-harness runtime state (the config at the root is tracked, this is not)\n${entry}\n`
+  return `${text ?? ''}${suffix}\n# provenly runtime state (the config at the root is tracked, this is not)\n${entry}\n`
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -393,7 +393,7 @@ const main = async () => {
     process.exit(1)
   }
 
-  log(`claude-harness -> ${target}${dryRun ? '  (dry run — nothing will be written)' : ''}\n`)
+  log(`provenly -> ${target}${dryRun ? '  (dry run — nothing will be written)' : ''}\n`)
 
   // 1. Scripts. Always refreshed; they are the harness, and a stale copy is the thing --upgrade exists
   //    to fix.
@@ -458,7 +458,7 @@ const main = async () => {
     record('keep', 'harness.config.json  (exists — pass --force to overwrite)')
   } else {
     const config = {
-      $schema: 'https://raw.githubusercontent.com/HeisenbergI8/claude-harness/main/harness.schema.json',
+      $schema: 'https://raw.githubusercontent.com/HeisenbergI8/provenly/main/harness.schema.json',
       commands: detected.commands,
       source: detected.source
     }
@@ -576,7 +576,7 @@ const main = async () => {
 // ── AM I THE PROGRAM, OR A MODULE SOMEONE IMPORTED? ────────────────────────────
 //
 // This used to ask whether `process.argv[1]` ENDED WITH this file's name, which is false on the one
-// install path everyone actually uses. npm links a bin as `node_modules/.bin/claude-harness`, so under
+// install path everyone actually uses. npm links a bin as `node_modules/.bin/provenly`, so under
 // `npx` argv[1] is that SYMLINK — the name does not match, `main()` never runs, and the process exits 0
 // having printed nothing at all. A silent success is the worst possible failure for an installer:
 // every signal the user has says it worked.

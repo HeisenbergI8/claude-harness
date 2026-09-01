@@ -1,8 +1,8 @@
 # Contributing
 
 ```bash
-git clone https://github.com/HeisenbergI8/claude-harness
-cd claude-harness
+git clone https://github.com/HeisenbergI8/provenly
+cd provenly
 npm test        # no install step — there are no dependencies
 ```
 

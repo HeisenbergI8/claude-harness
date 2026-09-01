@@ -16,7 +16,7 @@ export const makeRepo = ({ config, packageJson } = {}) => {
   // `/private/var/folders/...` — and a child process reports the RESOLVED form as its cwd. A fixture
   // handing out the unresolved path makes every absolute file_path look like it is outside the repo,
   // and the hook under test then skips for a reason that has nothing to do with what is being tested.
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'claude-harness-test-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'provenly-test-')))
 
   mkdirSync(join(root, '.claude'), { recursive: true })
 

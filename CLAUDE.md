@@ -1,4 +1,4 @@
-# claude-harness
+# provenly
 
 Installer plus template for a Claude Code guardrail harness: an activity ledger, gates that read it,
 guards, agents and a supervised task loop. Node ≥18, **zero dependencies**, ESM only.

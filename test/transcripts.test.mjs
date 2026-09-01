@@ -31,7 +31,7 @@ const user = content => ({ type: 'user', message: { role: 'user', content } })
 
 // A fake ~/.claude/projects tree: one main transcript, one subagent with a meta sibling.
 const makeTree = ({ main = [], subagents = {} } = {}) => {
-  const home = mkdtempSync(join(tmpdir(), 'claude-harness-transcripts-'))
+  const home = mkdtempSync(join(tmpdir(), 'provenly-transcripts-'))
   const cwd = '/Users/someone/project'
   const root = transcriptRoot(cwd, home)
 

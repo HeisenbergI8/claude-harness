@@ -1,5 +1,5 @@
 {
-  "name": "claude-harness",
+  "name": "provenly",
   "version": "0.2.0",
   "description": "Mechanical evidence, gates, guards, agents and a supervised task loop for Claude Code: an activity ledger, a claim checker that blocks unsupported 'tests pass', and a repair loop that escalates on stuck failures rather than on retries.",
   "keywords": [
@@ -15,14 +15,14 @@
   "author": "John Ross Rivera",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HeisenbergI8/claude-harness.git"
+    "url": "https://github.com/HeisenbergI8/provenly.git"
   },
   "type": "module",
   "engines": {
     "node": ">=18"
   },
   "bin": {
-    "claude-harness": "bin/harness-init.mjs"
+    "provenly": "bin/harness-init.mjs"
   },
   "files": [
     "bin/",

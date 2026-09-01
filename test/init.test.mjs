@@ -262,14 +262,14 @@ test('the shipped template settings are valid JSON and register every gate', () 
 
 // ── The npx entry path ─────────────────────────────────────────────────────────
 //
-// `npx github:HeisenbergI8/claude-harness init` is the documented install, and both halves of it were
+// `npx github:HeisenbergI8/provenly init` is the documented install, and both halves of it were
 // broken in ways that produced NO OUTPUT AT ALL: the bin file was not executable, so npx could not
 // launch it, and `init` was parsed as the target directory, so a working invocation installed into a
 // new subdirectory called `init` while the repo the user was standing in got nothing.
 //
 // Both failures are silent, which is why they are pinned here rather than left to a manual check.
 
-// The first line is `claude-harness -> <target>  (dry run — ...)`, which is the only place the
+// The first line is `provenly -> <target>  (dry run — ...)`, which is the only place the
 // resolved target is observable from outside.
 const resolvedTarget = (cwd, ...args) => {
   const out = execFileSync('node', [join(REPO, 'bin/harness-init.mjs'), '--dry-run', ...args], {
@@ -278,7 +278,7 @@ const resolvedTarget = (cwd, ...args) => {
     stdio: 'pipe'
   })
 
-  return /claude-harness -> (.+?)\s{2}/.exec(out)?.[1] ?? null
+  return /provenly -> (.+?)\s{2}/.exec(out)?.[1] ?? null
 }
 
 test('a bare `init` is a subcommand, and installs into the current directory', () => {
@@ -338,13 +338,13 @@ test('the bin file is committed executable, or npx cannot launch it', () => {
 // passes either way, which is exactly why it survived.
 test('the installer runs when invoked through a symlinked bin, as npx does', () => {
   const repo = fresh()
-  const link = join(repo.root, 'claude-harness')
+  const link = join(repo.root, 'provenly')
 
   symlinkSync(join(REPO, 'bin/harness-init.mjs'), link)
 
   const out = execFileSync(link, ['--dry-run', 'init'], { cwd: repo.root, encoding: 'utf8', stdio: 'pipe' })
 
-  assert.match(out, /claude-harness ->/, 'invoked through a bin symlink, the installer printed nothing')
+  assert.match(out, /provenly ->/, 'invoked through a bin symlink, the installer printed nothing')
   // `update` rather than `create`, because the fixture has the harness installed already. Either verb
   // proves the same thing: main() ran and walked the template.
   assert.match(out, /(create|update)\s+\.claude\/harness\//)
